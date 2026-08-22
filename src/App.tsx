@@ -9,9 +9,9 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/game:id" element={<PhaserGame />} />
-        <Route path="/play:id" element={<Controller />} />
-        <Route path="/result:id" element={<EndScreen />} />
+        <Route path="/game" element={<PhaserGame />} />
+        <Route path="/play" element={<Controller />} />
+        <Route path="/result" element={<EndScreen />} />
       </Routes>
     </BrowserRouter>
   )
