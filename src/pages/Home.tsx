@@ -1,6 +1,6 @@
 function Home() {
   return (
-    <></>
+    <><p className="text-black">hello!</p></>
   )
 }
 
