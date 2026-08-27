@@ -2,12 +2,14 @@ import { useEffect, useState } from "react"
 import QRCode from "react-qr-code"
 import { supabase } from "../lib/supabaseClient"
 import { Marquee } from "@/components/ui/marquee"
+
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
 import { Loader2, Smartphone } from 'lucide-react';
+
+import ccklogo from "@/assets/cck-logo.png"
 import place_1 from "../assets/place-1.png"
 import place_2 from "../assets/place-2.png"
 import place_3 from "../assets/place-3.png"
-import ccklogo from "@/assets/cck-logo.png"
 
 const placeImages = [place_1, place_2, place_3]
 const PLACE_COUNT = 5
@@ -30,7 +32,7 @@ function padPlayers(players: Player[]): Player[] {
     players[idx] ?? {
       id: `placeholder-${idx}`,
       name: "----",
-      score: "----",
+      score: "0000",
       isPlaceholder: false,
     }
   )
@@ -49,9 +51,9 @@ function Home() {
 
   async function generateId() {
     const uuid = await crypto.randomUUID();
-    const bakedQr = `http://localhost:5173/play?id=${uuid}`
+    const url = `${window.location.origin}/play?id=${uuid}`;
 
-    setQr(bakedQr)
+    setQr(url)
     setQrLoading(false)
   }
 
