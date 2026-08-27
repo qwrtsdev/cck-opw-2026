@@ -1,13 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { useSearchParams } from "react-router";
 import Phaser from 'phaser'
-
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
 
 export default function PhaserGame() {
-  const [searchParams] = useSearchParams();
-  const id = searchParams.get("id");
-
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
 
@@ -20,7 +15,7 @@ export default function PhaserGame() {
       }
 
       create() {
-        this.add.text(100, 100, `Hello Phaser 4 id ${id ?? ""}`)
+        this.add.text(100, 100, `Hello World`)
       }
     }
 
@@ -36,7 +31,7 @@ export default function PhaserGame() {
       gameRef.current?.destroy(true)
       gameRef.current = null
     }
-  }, [id])
+  }, [])
 
   return (
     <div className='relative w-screen h-screen flex justify-center items-center bg-neutral-900'>
