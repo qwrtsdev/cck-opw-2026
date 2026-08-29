@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route } from "react-router";
 import Home from './pages/Home'
-import PhaserGame from "./pages/PhaserGame";
-import Controller from "./pages/Controller";
-import EndScreen from "./pages/EndScreen";
+import PhaserGame from "@/pages/PhaserGame";
+import Controller from "@/pages/Controller";
+import EndScreen from "@/pages/EndScreen";
+import Admin from "@/pages/Admin";
 
 function App() {
   return (
@@ -10,8 +11,9 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/game" element={<PhaserGame />} />
-        <Route path="/play" element={<Controller />} />
+        <Route path="/control" element={<Controller />} />
         <Route path="/result" element={<EndScreen />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </BrowserRouter>
   )
