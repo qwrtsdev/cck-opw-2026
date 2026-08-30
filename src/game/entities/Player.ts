@@ -12,6 +12,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private armRight!: Phaser.GameObjects.Sprite
   private gun!: Phaser.GameObjects.Sprite
   private container!: Phaser.GameObjects.Container
+  private weaponContainer!: Phaser.GameObjects.Container
+  private playerSprite!: Phaser.GameObjects.Sprite
   
   // Direction tracking
   private currentAngle: number = 0
@@ -42,35 +44,55 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private setupVisuals() {
     const scene = this.scene
     
-    // Create container for player graphics (top-down view)
+    // Create main container (ไม่หมุน - แค่ไว้รวมทุกอย่าง)
     this.container = scene.add.container(this.x, this.y)
     this.container.setDepth(10)
     
-    // Player body indicator (small circle at center)
-    const bodyGraphics = scene.add.graphics()
-    bodyGraphics.fillStyle(0x0088ff, 0.8)
-    bodyGraphics.fillCircle(0, 0, 3)
-    this.container.add(bodyGraphics)
+    // Player body sprite - แสดงแค่ครึ่งเดียวของ sprite
+    this.playerSprite = scene.add.sprite(0, 0, 'player')
     
-    // Arm holding gun (single arm visible from top-down view)
-    // Using right side of hand texture, positioned to extend outward
-    this.armRight = scene.add.sprite(6, 0, 'hand')
-    this.armRight.setDisplaySize(12, 6)
-    this.armRight.setAlpha(0.9)
-    // Crop to show only the right half (hand reaching outward)
-    this.armRight.setCrop(16, 0, 16, 32)
-    this.armRight.setOrigin(0.1, 0.5) // Origin at wrist for rotation
-    this.container.add(this.armRight)
+    // ถ้า player.png มี 2 ตัวละครในรูปเดียว (ซ้าย-ขวา)
+    const texture = scene.textures.get('player')
+    const frame = texture.get()
+    const halfWidth = frame.width / 2
     
-    // Gun (random at start) - positioned at end of arm
+    // เริ่มต้นไม่ crop ก่อน แค่ใช้ครึ่งนึง
+    this.playerSprite.setCrop(halfWidth, 0, halfWidth, frame.height)
+    this.playerSprite.setOrigin(0.5, 0.5)
+    
+    // Scale ให้ตัวละครมีขนาดถูกต้องหลัง crop
+    const targetSize = GAME_CONFIG.PLAYER.SIZE
+    const scaleX = targetSize / halfWidth
+    const scaleY = targetSize / frame.height
+    this.playerSprite.setScale(scaleX, scaleY)
+    
+    this.container.add(this.playerSprite)
+    
+    // Weapon container (หมุนตามเมาส์) - ต้องอยู่เหนือตัวละคร
+    this.weaponContainer = scene.add.container(0, 0)
+    this.weaponContainer.setDepth(15) // เพิ่ม depth ให้สูงกว่าตัวละคร
+    
+    // Arm holding gun - ใช้ hand.png
+    this.armRight = scene.add.sprite(15, 0, 'hand')
+    this.armRight.setDisplaySize(25, 25)
+    this.armRight.setOrigin(0.3, 0.5)
+    this.armRight.setAlpha(1)
+    this.weaponContainer.add(this.armRight)
+    
+    // Gun (random at start) - วางที่ปลายมือ
     const gunOptions = ['gun_1', 'gun_2', 'gun_3', 'gun_4', 'gun_5', 'gun_6', 'gun_7', 'gun_8', 'gun_9', 'gun_10']
     const randomGun = gunOptions[Math.floor(Math.random() * gunOptions.length)]
     this.currentGunTexture = randomGun
     
-    this.gun = scene.add.sprite(16, 0, randomGun)
-    this.gun.setDisplaySize(14, 6)
-    this.gun.setOrigin(0.1, 0.5)
-    this.container.add(this.gun)
+    this.gun = scene.add.sprite(28, 0, randomGun)
+    this.gun.setDisplaySize(20, 12)
+    this.gun.setOrigin(0.3, 0.5)
+    this.weaponContainer.add(this.gun)
+    
+    // เพิ่ม weapon container เข้าใน scene (ไม่ใส่ใน main container)
+    scene.add.existing(this.weaponContainer)
+    
+    console.log('Player visuals setup complete - arm and gun added to weapon container')
   }
 
   update(cursors: Phaser.Types.Input.Keyboard.CursorKeys, WASD: any, mouseX: number = this.x, mouseY: number = this.y) {
@@ -95,13 +117,65 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const angle = Phaser.Math.Angle.Between(this.x, this.y, mouseX, mouseY)
     this.currentAngle = angle
     
-    // Rotate arm and gun to point toward mouse (smooth rotation)
-    const angleDiff = Phaser.Math.Angle.Wrap(angle - this.container.rotation)
-    this.container.rotation += angleDiff * 0.15 // Smooth rotation
+    // Determine if facing left or right based on angle
+    const facingLeft = Math.abs(angle) > Math.PI / 2
     
-    // Update container position to match physics body
+    // Flip player sprite (ไม่หมุน แค่ flip)
+    if (this.playerSprite) {
+      const texture = this.scene.textures.get('player')
+      const frame = texture.get()
+      const halfWidth = frame.width / 2
+      
+      const targetSize = GAME_CONFIG.PLAYER.SIZE
+      const scaleX = targetSize / halfWidth
+      const scaleY = targetSize / frame.height
+      
+      if (facingLeft) {
+        // หันซ้าย - ใช้ครึ่งขวาแล้ว flip (สลับจากเดิม)
+        this.playerSprite.setCrop(halfWidth, 0, halfWidth, frame.height)
+        this.playerSprite.setFlipX(true)
+      } else {
+        // หันขวา - ใช้ครึ่งซ้าย (สลับจากเดิม)
+        this.playerSprite.setCrop(0, 0, halfWidth, frame.height)
+        this.playerSprite.setFlipX(false)
+      }
+      
+      this.playerSprite.setScale(scaleX, scaleY)
+    }
+    
+    // Flip arm and gun based on direction
+    if (facingLeft) {
+      this.armRight.setFlipX(true)
+      this.gun.setFlipX(true)
+      // ตำแหน่งฝั่งซ้าย
+      this.armRight.x = -15
+      this.gun.x = -28
+      this.gun.setFlipY(false)
+    } else {
+      this.armRight.setFlipX(false)
+      this.gun.setFlipX(false)
+      // ตำแหน่งฝั่งขวา
+      this.armRight.x = 15
+      this.gun.x = 28
+      this.gun.setFlipY(false)
+    }
+    
+    // Rotate ONLY weapon container (แขน+ปืน) to point toward mouse
+    // เมื่อหันซ้าย ต้องกลับมุม
+    let targetAngle = angle
+    if (facingLeft) {
+      // กลับมุมเมื่อหันซ้าย (180 องศา - มุมเดิม)
+      targetAngle = angle > 0 ? angle - Math.PI : angle + Math.PI
+    }
+    
+    const angleDiff = Phaser.Math.Angle.Wrap(targetAngle - this.weaponContainer.rotation)
+    this.weaponContainer.rotation += angleDiff * 0.15 // Smooth rotation
+    
+    // Update both containers position to match physics body
     this.container.x = this.x
     this.container.y = this.y
+    this.weaponContainer.x = this.x
+    this.weaponContainer.y = this.y
   }
 
   takeDamage(amount: number) {
@@ -141,6 +215,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.container) {
       this.container.destroy()
     }
+    if (this.weaponContainer) {
+      this.weaponContainer.destroy()
+    }
     this.scene.events.emit('playerDeath')
   }
 
@@ -169,8 +246,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   getGunPosition(): Phaser.Math.Vector2 {
-    // Get gun position in world coordinates
-    const gunWorldPoint = this.container.getWorldTransformMatrix().transformPoint(this.gun.x, this.gun.y)
+    // Get gun position in world coordinates from weapon container
+    const gunWorldPoint = this.weaponContainer.getWorldTransformMatrix().transformPoint(this.gun.x, this.gun.y)
     return new Phaser.Math.Vector2(gunWorldPoint.x, gunWorldPoint.y)
   }
 
