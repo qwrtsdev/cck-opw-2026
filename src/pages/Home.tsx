@@ -1,10 +1,11 @@
+import { Marquee } from "@/components/ui/marquee"
 import { useEffect, useState } from "react"
 import QRCode from "react-qr-code"
+import { useNavigate } from "react-router"
 import { supabase } from "../lib/supabaseClient"
-import { Marquee } from "@/components/ui/marquee"
 
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
-import { Loader2, Smartphone } from 'lucide-react';
+import { Loader2, Play, Smartphone } from 'lucide-react'
 
 import ccklogo from "@/assets/cck-logo.png"
 import place_1 from "../assets/place-1.png"
@@ -39,6 +40,7 @@ function padPlayers(players: Player[]): Player[] {
 }
 
 function Home() {
+  const navigate = useNavigate()
   const [qr, setQr] = useState('')
   const [players, setPlayers] = useState<Player[]>([])
   const [qrLoading, setQrLoading] = useState(true)
@@ -58,20 +60,32 @@ function Home() {
   }
 
   async function getLeaderboard() {
-    const { data, error } = await supabase
-      .from('players')
-      .select('*')
-      .order('score', { ascending: false })
-      .limit(5)
+    try {
+      // Check if Supabase is properly configured
+      if (!supabase || !supabase.from) {
+        console.warn("Supabase not properly configured, skipping leaderboard")
+        setScoreLoading(false)
+        return
+      }
 
-    if (error) {
-      console.error("Supabase Error:", error)
+      const { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .order('score', { ascending: false })
+        .limit(5)
+
+      if (error) {
+        console.warn("Supabase Error (leaderboard will show empty):", error.message)
+        setScoreLoading(false)
+        return
+      }
+
+      setPlayers(data || [])
+    } catch (err) {
+      console.warn("Failed to load leaderboard:", err instanceof Error ? err.message : String(err))
+    } finally {
       setScoreLoading(false)
-      return
     }
-
-    setPlayers(data || [])
-    setScoreLoading(false)
   }
 
   const displayedPlayers = padPlayers(scoreLoading ? [] : players)
@@ -114,6 +128,15 @@ function Home() {
                 />)}
             </div>
             <p className="text-2xl"><Smartphone className="inline mr-3" />แสกนเพื่อเล่นเกม</p>
+            
+            {/* Direct game access button for testing */}
+            <button
+              onClick={() => navigate('/game')}
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-lg transition-colors"
+            >
+              <Play className="w-5 h-5" />
+              เข้าเกมโดยตรง (Test)
+            </button>
           </div>
 
           <Marquee repeat={4} reverse={true} className="w-full text-white font-pixel text-8xl shrink-0 flex flex-row justify-center items-center">

@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
 import Phaser from 'phaser'
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
+import { BootScene } from '@/game/scenes/BootScene'
+import { GameScene } from '@/game/scenes/GameScene'
+import { UIScene } from '@/game/scenes/UIScene'
+import { GameOverScene } from '@/game/scenes/GameOverScene'
 
 export default function PhaserGame() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -9,27 +13,37 @@ export default function PhaserGame() {
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return
 
-    class MainScene extends Phaser.Scene {
-      constructor() {
-        super("main")
-      }
-
-      create() {
-        this.add.text(100, 100, `Hello World`)
-      }
+    try {
+      gameRef.current = new Phaser.Game({
+        type: Phaser.AUTO,
+        width: 1400,
+        height: 900,
+        parent: containerRef.current,
+        backgroundColor: '#1a1a2e',
+        scene: [BootScene, GameScene, UIScene, GameOverScene],
+        physics: {
+          default: 'arcade',
+          arcade: {
+            gravity: { x: 0, y: 0 },
+            debug: false
+          }
+        },
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH
+        }
+      })
+      
+      console.log('Phaser game initialized successfully')
+    } catch (error) {
+      console.error('Error initializing Phaser game:', error)
     }
 
-    gameRef.current = new Phaser.Game({
-      type: Phaser.AUTO,
-      width: 1400,
-      height: 900,
-      parent: containerRef.current,
-      scene: [MainScene],
-    })
-
     return () => {
-      gameRef.current?.destroy(true)
-      gameRef.current = null
+      if (gameRef.current) {
+        gameRef.current.destroy(true)
+        gameRef.current = null
+      }
     }
   }, [])
 
@@ -39,7 +53,7 @@ export default function PhaserGame() {
         <GlyphMatrix cellSize={20} />
       </div>
 
-      <div ref={containerRef} className='border-white border-4 relative' />
+      <div ref={containerRef} className='border-white border-4 relative' style={{ width: '1400px', height: '900px' }} />
     </div>
   )
 }

@@ -1,0 +1,10 @@
+// Main entry point for game components
+export { GAME_CONFIG } from './config'
+export { Enemy } from './entities/Enemy'
+export { Player } from './entities/Player'
+export { BootScene } from './scenes/BootScene'
+export { GameOverScene } from './scenes/GameOverScene'
+export { GameScene } from './scenes/GameScene'
+export { UIScene } from './scenes/UIScene'
+export { SpawnManager } from './systems/SpawnManager'
+export { WeaponManager } from './systems/WeaponManager'
