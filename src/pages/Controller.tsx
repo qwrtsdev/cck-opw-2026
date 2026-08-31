@@ -6,11 +6,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
-import type { Session, SessionStatus, Profile } from "@/types/game";
+import type { Session, Profile } from "@/types/game";
 
+import gameLogo from "@/assets/cascade_failure_logo.png"
 import ccklogo from "@/assets/cck-logo.png"
-import TouchButton from "@/components/TouchButton";
-import { Loader2, Check, CircleAlert, Globe, GamepadDirectional } from "lucide-react";
+import { Loader2, Check, CircleAlert, Globe, GamepadDirectional, RefreshCcw } from "lucide-react";
+
+type SessionStatus = "loading" | "invalid" | "ready" | "starting" | "claimed" | "playing"
 
 function Controller() {
   const [params] = useSearchParams();
@@ -95,11 +97,9 @@ function Controller() {
 
   // Load the player's profile once we have a session and an authed user
   useEffect(() => {
-    // NOTE: if useAuth exposes a loading flag (e.g. user.loading), guard on
-    // that here too — otherwise this can briefly mark the session "invalid"
-    // while auth is still resolving. Worth checking useAuth's shape.
     if (!session) return;
-    if (!user.player?.id) return;
+    if (user.loading) return;          // auth hasn't settled yet — wait
+    if (!user.player?.id) return;      // auth done but no player (shouldn't happen)
 
     let cancelled = false;
 
@@ -130,42 +130,71 @@ function Controller() {
 
     loadProfile();
     return () => { cancelled = true; };
-  }, [session, user.player?.id]);
+  }, [session, user.player?.id, user.loading]);
 
   // Twin joysticks — only mounted once we're actually in the playing view
   useEffect(() => {
     if (status !== "playing") return;
 
-    const left = nipplejs.create({
-      zone: document.getElementById('stick-left')!,
-      mode: 'static',
-      position: { left: '50%', top: '50%' },
-      size: 140,
-      color: '#a3a3a3',
-    });
-    const right = nipplejs.create({
-      zone: document.getElementById('stick-right')!,
-      mode: 'static',
-      position: { left: '50%', top: '50%' },
-      size: 140,
-      color: '#a3a3a3',
-    });
+    let left: any;
+    let right: any;
+    let destroyed = false;
 
-    const DEADZONE = 10; // px of stick travel before a direction counts — avoids jitter near center
+    const leftZone = document.getElementById('stick-left')!;
+    const rightZone = document.getElementById('stick-right')!;
 
-    (left as any).on('move', (_evt: any, data: any) => {
-      if (data.distance < DEADZONE) return;
-      sendInput('move', angleToDirection(data.angle.degree));
+    function createSticks() {
+      if (destroyed) return;
+      left = nipplejs.create({
+        zone: leftZone,
+        mode: 'static',
+        position: { left: '50%', top: '50%' },
+        size: 140,
+        color: '#a3a3a3',
+      });
+      right = nipplejs.create({
+        zone: rightZone,
+        mode: 'static',
+        position: { left: '50%', top: '50%' },
+        size: 140,
+        color: '#a3a3a3',
+      });
+
+      const DEADZONE = 10;
+      (left as any).on('move', (_evt: any, data: any) => {
+        if (data.distance < DEADZONE) return;
+        sendInput('move', angleToDirection(data.angle.degree));
+      });
+      (left as any).on('end', () => sendInput('move', null));
+      (right as any).on('move', (_evt: any, data: any) => {
+        if (data.distance < DEADZONE) return;
+        sendInput('face', angleToDirection(data.angle.degree));
+      });
+      (right as any).on('end', () => sendInput('face', null));
+    }
+
+    function destroySticks() {
+      left?.destroy();
+      right?.destroy();
+      left = undefined;
+      right = undefined;
+    }
+
+    // Recreate whenever either zone's rendered size actually changes
+    // (covers: initial mount while hidden, orientation change, resize)
+    const ro = new ResizeObserver((entries) => {
+      const hasSize = entries.every(e => e.contentRect.width > 0 && e.contentRect.height > 0);
+      destroySticks();
+      if (hasSize) createSticks();
     });
-    (left as any).on('end', () => sendInput('move', null));
+    ro.observe(leftZone);
+    ro.observe(rightZone);
 
-    (right as any).on('move', (_evt: any, data: any) => {
-      if (data.distance < DEADZONE) return;
-      sendInput('face', angleToDirection(data.angle.degree));
-    });
-    (right as any).on('end', () => sendInput('face', null));
-
-    return () => { left.destroy(); right.destroy(); };
+    return () => {
+      destroyed = true;
+      ro.disconnect();
+      destroySticks();
+    };
   }, [status]);
 
   async function handleUpdateName() {
@@ -241,32 +270,24 @@ function Controller() {
   if (status === "playing") {
     return (
       <div className="w-screen h-dvh bg-neutral-900 select-none relative" style={{ touchAction: 'none' }}>
-
         <div className="hidden portrait:flex absolute inset-0 z-50 flex-col items-center justify-center gap-4 bg-neutral-900">
-          <GamepadDirectional className="w-12 h-12 text-neutral-500 animate-spin" style={{ animationDuration: '2.5s' }} />
-          <p className="font-thai text-white text-lg tracking-wide">กรุณาหมุนมือถือ</p>
+          <RefreshCcw className="w-10 h-10 text-neutral-500 animate-[spin_linear_infinite_reverse]" style={{ animationDuration: '2.5s' }} />
+          <p className="font-thai text-white text-lg tracking-wide">กรุณาหมุนมือถือแนวนอน</p>
         </div>
-
-        <div className="hidden landscape:flex h-full w-full items-center justify-center">
-          <div className="flex flex-col items-center" style={{ gap: 'clamp(12px, 3vh, 28px)' }}>
-
-            <div className="flex items-center" style={{ gap: 'clamp(16px, 6vw, 48px)' }}>
-              <div
-                id="stick-left"
-                className="relative rounded-full bg-neutral-800 border border-neutral-700"
-                style={{ touchAction: 'none', width: 'clamp(88px, 22vh, 150px)', height: 'clamp(88px, 22vh, 150px)' }}
-              />
-              <div
-                id="stick-right"
-                className="relative rounded-full bg-neutral-800 border border-neutral-700"
-                style={{ touchAction: 'none', width: 'clamp(88px, 22vh, 150px)', height: 'clamp(88px, 22vh, 150px)' }}
-              />
-            </div>
-
-            <div className="flex items-center" style={{ gap: 'clamp(12px, 3vw, 24px)' }}>
-              <TouchButton label="B" onPress={() => sendInput('B', true)} onRelease={() => sendInput('B', false)} />
-              <TouchButton label="A" onPress={() => sendInput('A', true)} onRelease={() => sendInput('A', false)} />
-            </div>
+        <div className="hidden landscape:flex h-full w-full">
+          <div className="w-1/2 h-full flex items-center justify-center">
+            <div
+              id="stick-left"
+              className="relative rounded-full bg-neutral-800 border border-neutral-700"
+              style={{ touchAction: 'none', width: 'clamp(88px, min(28vw, 45vh), 220px)', height: 'clamp(88px, min(28vw, 45vh), 220px)' }}
+            />
+          </div>
+          <div className="w-1/2 h-full flex items-center justify-center">
+            <div
+              id="stick-right"
+              className="relative rounded-full bg-neutral-800 border border-neutral-700"
+              style={{ touchAction: 'none', width: 'clamp(88px, min(28vw, 45vh), 220px)', height: 'clamp(88px, min(28vw, 45vh), 220px)' }}
+            />
           </div>
         </div>
       </div>
@@ -327,9 +348,9 @@ function Controller() {
 
   return (
     <div className="min-h-screen w-screen bg-neutral-900 select-none relative flex flex-col gap-9 justify-center items-center">
-      <span className="flex flex-row justify-center items-center">
-        <img src={ccklogo} alt="Computer Club Logo" className="w-7 h-7 mr-2" />
-        <h1 className="font-pixel text-6xl text-white tracking-tight">ชมรมคอมพิวเตอร์ มจพ.</h1>
+      <span className="flex flex-row justify-center items-center mt-9">
+        <img src={gameLogo} alt="Cascade Failure Logo" className="w-80 h-auto mr-2" />
+
       </span>
 
       {status === "loading" ? (
@@ -388,6 +409,11 @@ function Controller() {
           </ol>
         </div>
       </div>
+
+      <span className="flex flex-row justify-center items-center mb-9">
+        <img src={ccklogo} alt="Computer Club Logo" className="w-5 h-5 mr-2" />
+        <h1 className="font-pixel text-4xl text-white tracking-tight">ชมรมคอมพิวเตอร์ มจพ.</h1>
+      </span>
 
       <Toaster />
     </div>
