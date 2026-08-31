@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { sessionManager } from "@/lib/sessionManager";
 import toast, { Toaster } from 'react-hot-toast';
 
 import type { Session } from "@/types/game"
@@ -184,7 +185,23 @@ function Admin() {
         setSessions((prev) => prev.filter((s) => s.id !== id));
     }
 
-    // TODO: Re-Create New Session
+    const [creatingSession, setCreatingSession] = useState(false);
+
+    async function handleNewSession() {
+        if (creatingSession) return;
+        setCreatingSession(true);
+
+        try {
+            const data = await sessionManager();
+            if (data) {
+                toast.success("สร้างเซสชั่นใหม่สำเร็จ");
+            }
+        } catch {
+            toast.error("สร้างเซสชั่นไม่สำเร็จ");
+        } finally {
+            setCreatingSession(false);
+        }
+    }
 
     // authentication
     if (!authed) {
@@ -226,16 +243,30 @@ function Admin() {
         <div className="font-thai min-h-screen w-screen bg-neutral-900 p-8 text-white">
             <Toaster />
             <div className="mx-auto justify-center max-w-5xl">
-                <div className="mb-6 flex items-baseline justify-between">
+                <div className="mb-6 flex items-center justify-between">
                     <span className="flex flex-row justify-center items-center">
                         <img src={ccklogo} alt="Computer Club Logo" className="w-6 h-6 mr-2" />
                         <h1 className="font-thai text-2xl font-semibold tracking-tight">เซสชั่นทั้งหมด</h1>
                     </span>
-                    {!currentLoading && currentList.length > 0 && (
-                        <span className="text-sm text-neutral-500 font-thai">
-                            {currentList.length} {view === "active" ? "ที่เปิดอยู่" : "ที่จบแล้ว"}
-                        </span>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {!currentLoading && currentList.length > 0 && (
+                            <span className="text-sm text-neutral-500 font-thai">
+                                {currentList.length} {view === "active" ? "ที่เปิดอยู่" : "ที่จบแล้ว"}
+                            </span>
+                        )}
+                        {view === "active" && (
+                            <button
+                                onClick={handleNewSession}
+                                disabled={loading || creatingSession}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-700 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                {creatingSession ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : null}
+                                สร้างเซสชั่นใหม่
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* View toggle */}
