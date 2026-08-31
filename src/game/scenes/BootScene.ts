@@ -140,6 +140,5 @@ export class BootScene extends Phaser.Scene {
     }
 
     this.scene.start(GAME_CONFIG.SCENES.GAME)
-    this.scene.launch(GAME_CONFIG.SCENES.UI)
   }
 }

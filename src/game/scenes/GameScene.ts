@@ -50,6 +50,9 @@ export class GameScene extends Phaser.Scene {
     this.spawnManager = new SpawnManager(this, this.player)
     this.weaponManager = new WeaponManager(this, this.player)
 
+    // Launch UI scene for health bar and score display
+    this.scene.launch(GAME_CONFIG.SCENES.UI)
+
 
 
     this.events.on('enemyKilled', (enemy: any, score: number) => {

@@ -13,6 +13,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private playerSprite!: Phaser.GameObjects.Sprite
   private bodyContainer!: Phaser.GameObjects.Container
   private weaponContainer!: Phaser.GameObjects.Container
+  private healthBar!: Phaser.GameObjects.Graphics
+  private healthBarBg!: Phaser.GameObjects.Graphics
 
   private currentAngle: number = 0
   private currentGunTexture: string = ''
@@ -75,6 +77,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hand.setOrigin(0.5, 0.5)
     this.cropHalf(this.hand, 'hand', 'left', 16)
     this.weaponContainer.add(this.hand)
+
+    // Health bar above player
+    this.createHealthBar()
   }
 
   update(cursors: Phaser.Types.Input.Keyboard.CursorKeys, WASD: any, mouseX: number = this.x, mouseY: number = this.y) {
@@ -130,22 +135,83 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   takeDamage(amount: number) {
     if (this.isInvincible) return
-    this.health -= amount
     this.isInvincible = true
     this.bodyContainer?.setAlpha(0.5)
     this.weaponContainer?.setAlpha(0.5)
-    this.scene.time.delayedCall(GAME_CONFIG.PLAYER.INVINCIBILITY_TIME, () => {
-      this.isInvincible = false
-      this.bodyContainer?.setAlpha(1)
-      this.weaponContainer?.setAlpha(1)
+    
+    // Gradual damage over time
+    const damagePerTick = amount / 10 // Divide damage into 10 ticks
+    let ticksRemaining = 10
+    
+    const damageInterval = this.scene.time.addEvent({
+      delay: 50, // 50ms per tick
+      callback: () => {
+        this.health -= damagePerTick
+        this.updateHealthBar()
+        this.scene.events.emit('playerHealthChanged', this.health, this.maxHealth)
+        ticksRemaining--
+        
+        if (ticksRemaining <= 0 || this.health <= 0) {
+          damageInterval.remove()
+          this.isInvincible = false
+          this.bodyContainer?.setAlpha(1)
+          this.weaponContainer?.setAlpha(1)
+          if (this.health <= 0) this.die()
+        }
+      },
+      callbackScope: this,
+      repeat: 9 // Run 10 times total
     })
-    this.scene.events.emit('playerHealthChanged', this.health, this.maxHealth)
-    if (this.health <= 0) this.die()
   }
 
   heal(amount: number) {
     this.health = Math.min(this.health + amount, this.maxHealth)
+    this.updateHealthBar()
     this.scene.events.emit('playerHealthChanged', this.health, this.maxHealth)
+  }
+
+  private createHealthBar() {
+    const barWidth = 40
+    const barHeight = 6
+    const xOffset = -15 // Move far left to actual player body
+    const yOffset = -25 // Position above player
+
+    // Background bar
+    this.healthBarBg = this.scene.add.graphics()
+    this.healthBarBg.fillStyle(0x333333, 0.8)
+    this.healthBarBg.fillRect(xOffset - barWidth / 2, yOffset, barWidth, barHeight)
+    this.healthBarBg.setDepth(30)
+    this.bodyContainer.add(this.healthBarBg)
+
+    // Health bar
+    this.healthBar = this.scene.add.graphics()
+    this.healthBar.fillStyle(0x00ff00, 1)
+    this.healthBar.fillRect(xOffset - barWidth / 2, yOffset, barWidth, barHeight)
+    this.healthBar.setDepth(31)
+    this.bodyContainer.add(this.healthBar)
+  }
+
+  private updateHealthBar() {
+    if (!this.healthBar || !this.healthBarBg) return
+
+    const barWidth = 40
+    const barHeight = 6
+    const xOffset = -20 // Move far left to actual player body
+    const yOffset = -25
+    const healthPercent = Math.max(0, this.health / this.maxHealth)
+
+    this.healthBar.clear()
+
+    // Change color based on health percentage
+    if (healthPercent > 0.6) {
+      this.healthBar.fillStyle(0x00ff00, 1) // Green
+    } else if (healthPercent > 0.3) {
+      this.healthBar.fillStyle(0xffff00, 1) // Yellow
+    } else {
+      this.healthBar.fillStyle(0xff0000, 1) // Red
+    }
+
+    this.healthBar.fillRect(xOffset - barWidth / 2, yOffset, barWidth * healthPercent, barHeight)
   }
 
   die() {
