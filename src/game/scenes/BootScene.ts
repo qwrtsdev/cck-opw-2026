@@ -78,6 +78,38 @@ export class BootScene extends Phaser.Scene {
     this.load.image('gun_9', 'game/2 Guns/9_1.png')
     this.load.image('gun_10', 'game/2 Guns/10_1.png')
     
+    // Gun fire-frame sprites (frame 2 = shooting animation)
+    this.load.image('gun_1_fire', 'game/2 Guns/1_2.png')
+    this.load.image('gun_2_fire', 'game/2 Guns/2_2.png')
+    this.load.image('gun_3_fire', 'game/2 Guns/3_2.png')
+    this.load.image('gun_4_fire', 'game/2 Guns/4_2.png')
+    this.load.image('gun_5_fire', 'game/2 Guns/5_2.png')
+    this.load.image('gun_6_fire', 'game/2 Guns/6_2.png')
+    this.load.image('gun_7_fire', 'game/2 Guns/7_2.png')
+    this.load.image('gun_8_fire', 'game/2 Guns/8_2.png')
+    this.load.image('gun_9_fire', 'game/2 Guns/9_2.png')
+    this.load.image('gun_10_fire', 'game/2 Guns/10_2.png')
+    
+    // Shoot-effect strips: 288x48 = 6 frames of 48x48, left to right
+    for (const n of [6, 7, 8, 9, 10]) {
+      this.load.spritesheet(`effect_${n}_1`, `game/4 Shoot_effects/${n}_1.png`, {
+        frameWidth: 48,
+        frameHeight: 48
+      })
+      this.load.spritesheet(`effect_${n}_2`, `game/4 Shoot_effects/${n}_2.png`, {
+        frameWidth: 48,
+        frameHeight: 48
+      })
+    }
+
+    // Chambered / pickup bullets + fired projectiles (*_2)
+    for (let i = 1; i <= 10; i++) {
+      this.load.image(`bullet_${i}`, `game/5 Bullets/${i}.png`)
+    }
+    for (const i of [1, 2, 3, 4, 5, 6, 7, 9, 10]) {
+      this.load.image(`bullet_${i}_2`, `game/5 Bullets/${i}_2.png`)
+    }
+    
     // Enemy sprites (all use the same bug texture)
     this.load.image('enemy_bug', 'game/enemy_bug.png')
     
@@ -87,7 +119,26 @@ export class BootScene extends Phaser.Scene {
 
   create() {
     console.log('BootScene create() called')
-    // Start the game scene
+
+    if (!this.textures.exists('bullet_invisible')) {
+      const g = this.add.graphics()
+      g.fillStyle(0xffffff, 0)
+      g.fillRect(0, 0, 8, 8)
+      g.generateTexture('bullet_invisible', 8, 8)
+      g.destroy()
+    }
+
+    for (const n of [6, 7, 8, 9, 10]) {
+      for (const suffix of [1, 2]) {
+        this.anims.create({
+          key: `effect_${n}_${suffix}_anim`,
+          frames: this.anims.generateFrameNumbers(`effect_${n}_${suffix}`, { start: 0, end: 5 }),
+          frameRate: 18,
+          repeat: 0
+        })
+      }
+    }
+
     this.scene.start(GAME_CONFIG.SCENES.GAME)
     this.scene.launch(GAME_CONFIG.SCENES.UI)
   }

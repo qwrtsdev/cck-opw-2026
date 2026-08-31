@@ -22,8 +22,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.health = GAME_CONFIG.PLAYER.MAX_HEALTH
     this.maxHealth = GAME_CONFIG.PLAYER.MAX_HEALTH
     this.isInvincible = false
-    this.weapons = ['DEBUG_RAY']
-    this.currentWeapon = 'DEBUG_RAY'
+    this.weapons = []
+    this.currentWeapon = 'RAPID_FIRE'
     scene.add.existing(this)
     scene.physics.add.existing(this)
     this.setCollideWorldBounds(true)
@@ -64,8 +64,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.weaponContainer.setDepth(20)
 
     // ปืน: x=-12 จุดหมุนเข้ามาในลำตัวมากขึ้น, origin=(0,0.5) โคนปืนที่ x=-12
-    const gunOptions = ['gun_1','gun_2','gun_3','gun_4','gun_5','gun_6','gun_7','gun_8','gun_9','gun_10']
-    this.currentGunTexture = gunOptions[Math.floor(Math.random() * gunOptions.length)]
+    this.currentGunTexture = 'gun_1'
     this.gun = scene.add.sprite(-12, 0, this.currentGunTexture)
     this.gun.setDisplaySize(20, 10)
     this.gun.setOrigin(0, 0.5)
@@ -102,15 +101,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // มือ + ปืน: mirror position เมื่อหันซ้าย เพื่อให้ไปอยู่ด้านซ้ายของตัว
     if (facingLeft) {
-      // ปืน: origin(0,0.5) + width=20 → เมื่อ flipY โคนปืนยังที่เดิม แต่ปลายกลับ
-      // mirror คือ: x_new = -(x_old + width) = -(-12 + 20) = -8
+      // ซ้าย: ขยับปืนไปทางซ้ายมากขึ้น และมือติดกับปืน
       this.gun.setFlipY(true)
-      this.gun.x = 8
+      this.gun.x = 12
       
-      // มือ: อยู่กึ่งกลางปืน ที่ x = 8 + 10/2 = 13? ลองปรับให้ชิด
       this.cropHalf(this.hand, 'hand', 'right', 16)
       this.hand.setFlipX(true)
-      this.hand.x = 12
+      this.hand.x = 14
     } else {
       this.gun.setFlipY(false)
       this.gun.x = -12
@@ -160,6 +157,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   getCurrentWeapon() { return this.currentWeapon }
+  getCurrentWeaponType(): string {
+    return (GAME_CONFIG.GUN_MAPPING as any)[this.currentGunTexture] || 'RAPID_FIRE'
+  }
   switchWeapon(weaponName: string) { if (this.weapons.includes(weaponName)) this.currentWeapon = weaponName }
   addWeapon(weaponName: string) { if (!this.weapons.includes(weaponName)) this.weapons.push(weaponName) }
   getHealth()    { return this.health }
@@ -181,10 +181,36 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       : Math.abs(this.currentAngle) < Math.PI / 2
   }
 
+  playFireAnimation(duration: number = 80) {
+    // Switch to fire frame
+    const fireTexture = this.currentGunTexture + '_fire'
+    this.gun.setTexture(fireTexture)
+    
+    // Return to idle frame after duration
+    this.scene.time.delayedCall(duration, () => {
+      if (this.gun && this.gun.active) {
+        this.gun.setTexture(this.currentGunTexture)
+      }
+    })
+  }
+
   switchGunVisual(gunTexture: string) {
     this.currentGunTexture = gunTexture
     this.gun.setTexture(gunTexture)
-    this.scene.tweens.add({ targets: this.gun, alpha: 0.5, duration: 100, yoyo: true })
+    
+    // Update current weapon based on gun texture
+    const weaponType = (GAME_CONFIG.GUN_MAPPING as any)[gunTexture]
+    if (weaponType) {
+      this.currentWeapon = weaponType
+    }
+    
+    // Flash effect when switching
+    this.scene.tweens.add({
+      targets: this.gun,
+      alpha: 0.5,
+      duration: 100,
+      yoyo: true
+    })
   }
 
   getCurrentGunTexture(): string { return this.currentGunTexture }

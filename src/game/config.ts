@@ -82,46 +82,80 @@ export const GAME_CONFIG = {
     }
   },
   
-  // Weapon configuration (Soul Knight style)
+  // Gun texture to weapon type mapping
+  GUN_MAPPING: {
+    'gun_1': 'RAPID_FIRE',
+    'gun_2': 'RAPID_FIRE', 
+    'gun_6': 'RAPID_FIRE',
+    'gun_7': 'RAPID_FIRE',
+    'gun_3': 'SPREAD_SHOT',
+    'gun_4': 'SPREAD_SHOT',
+    'gun_10': 'SPREAD_SHOT',
+    'gun_5': 'AOE_BLAST',
+    'gun_8': 'AOE_BLAST',
+    'gun_9': 'AOE_BLAST'
+  } as const,
+
+  // Fired projectile sprites (*_2). Guns without _2 use an invisible bullet.
+  BULLET_MAPPING: {
+    'gun_1':  'bullet_1_2',
+    'gun_2':  'bullet_2_2',
+    'gun_3':  'bullet_3_2',
+    'gun_4':  'bullet_4_2',
+    'gun_5':  'bullet_5_2',
+    'gun_6':  'bullet_6_2',
+    'gun_7':  'bullet_7_2',
+    'gun_8':  null,
+    'gun_9':  'bullet_9_2',
+    'gun_10': 'bullet_10_2',
+  } as const,
+
+  // Shoot-effect strips exist only for 6–10; reuse by weapon type.
+  // Machine (1,2,6,7) → 6/7, shotgun (3,4,10) → 10, AOE (5,8,9) → 8/9
+  FLASH_MAPPING: {
+    'gun_1':  'effect_6',
+    'gun_2':  'effect_7',
+    'gun_6':  'effect_6',
+    'gun_7':  'effect_7',
+    'gun_3':  'effect_10',
+    'gun_4':  'effect_10',
+    'gun_10': 'effect_10',
+    'gun_5':  'effect_8',
+    'gun_8':  'effect_8',
+    'gun_9':  'effect_9',
+  } as const,
+  
+  // Updated weapon configuration for gun types
   WEAPONS: {
-    DEBUG_RAY: {
-      name: 'Debug Ray',
-      damage: 15,
-      fireRate: 200, // ms
-      range: 500,
+    RAPID_FIRE: {
+      name: 'Rapid Fire',
+      damage: 12,
+      fireRate: 150, // Fast firing
+      range: 600,
       type: 'projectile',
       color: 0x00ff00,
-      speed: 600,
-      size: 4
-    },
-    FIREWALL_BURST: {
-      name: 'Firewall Burst',
-      damage: 40,
-      fireRate: 1500,
-      range: 200,
-      type: 'aoe',
-      color: 0xff6600,
-      radius: 150
-    },
-    PACKET_STORM: {
-      name: 'Packet Storm',
-      damage: 12,
-      fireRate: 300,
-      range: 400,
-      type: 'spread',
-      projectileCount: 7,
-      color: 0x00ffff,
-      speed: 500,
+      speed: 700,
       size: 3
     },
-    COMPILER_BLADE: {
-      name: 'Compiler Blade',
+    SPREAD_SHOT: {
+      name: 'Spread Shot', 
+      damage: 10,
+      fireRate: 400,
+      range: 450,
+      type: 'spread',
+      projectileCount: 5,
+      color: 0xffaa00,
+      speed: 550,
+      size: 4
+    },
+    AOE_BLAST: {
+      name: 'AOE Blast',
       damage: 35,
-      fireRate: 500,
-      range: 100,
-      type: 'melee',
-      color: 0xff00ff,
-      radius: 80
+      fireRate: 800, // Slower firing
+      range: 300,
+      type: 'aoe',
+      color: 0xff3300,
+      radius: 120
     }
   },
   

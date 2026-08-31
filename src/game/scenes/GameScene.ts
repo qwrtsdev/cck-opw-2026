@@ -11,7 +11,7 @@ export class GameScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private WASD!: any
   private spaceKey!: Phaser.Input.Keyboard.Key
-  private weaponKeys!: any
+
   private mouseX: number = 0
   private mouseY: number = 0
   private score: number = 0
@@ -39,7 +39,7 @@ export class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys()
     this.WASD = this.input.keyboard!.addKeys('W,A,S,D')
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
-    this.weaponKeys = this.input.keyboard!.addKeys('ONE,TWO,THREE,FOUR')
+
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
@@ -50,11 +50,7 @@ export class GameScene extends Phaser.Scene {
     this.spawnManager = new SpawnManager(this, this.player)
     this.weaponManager = new WeaponManager(this, this.player)
 
-    this.spaceKey.on('down', () => this.weaponManager.fire())
-    this.weaponKeys.ONE.on('down', () => this.weaponManager.switchWeapon('DEBUG_RAY'))
-    this.weaponKeys.TWO.on('down', () => this.weaponManager.switchWeapon('FIREWALL_BURST'))
-    this.weaponKeys.THREE.on('down', () => this.weaponManager.switchWeapon('PACKET_STORM'))
-    this.weaponKeys.FOUR.on('down', () => this.weaponManager.switchWeapon('COMPILER_BLADE'))
+
 
     this.events.on('enemyKilled', (enemy: any, score: number) => {
       this.score += score
@@ -137,6 +133,10 @@ export class GameScene extends Phaser.Scene {
     this.player.update(this.cursors, this.WASD, this.mouseX, this.mouseY)
     this.spawnManager.update(delta)
     this.weaponManager.update()
+
+    if (this.spaceKey.isDown || this.input.activePointer.isDown) {
+      this.weaponManager.fire()
+    }
 
     this.spawnManager.getEnemies().forEach(enemy => {
       if (enemy.active) {

@@ -1,31 +1,33 @@
 import Phaser from 'phaser'
 import { GAME_CONFIG } from '../config'
 import { BloodEffect } from '../effects/BloodEffect'
-
-type WeaponType = keyof typeof GAME_CONFIG.WEAPONS
+import { ShootEffect } from '../effects/ShootEffect'
 
 export class WeaponManager {
   private scene: Phaser.Scene
-  private player: Phaser.Physics.Arcade.Sprite & { getGunPosition?: () => Phaser.Math.Vector2; getAimAngle?: () => number }
+  private player: Phaser.Physics.Arcade.Sprite & {
+    getGunPosition?: () => Phaser.Math.Vector2
+    getAimAngle?: () => number
+    getCurrentWeaponType?: () => string
+    playFireAnimation?: (duration?: number) => void
+    getCurrentGunTexture?: () => string
+  }
   private enemies: Phaser.Physics.Arcade.Sprite[]
-  private currentWeapon: WeaponType
   private lastFireTime: number = 0
   private projectiles: Phaser.Physics.Arcade.Group
   private mouseX: number = 0
   private mouseY: number = 0
   private bloodEffect: BloodEffect
+  private shootEffect: ShootEffect
 
   constructor(scene: Phaser.Scene, player: Phaser.Physics.Arcade.Sprite) {
     this.scene = scene
     this.player = player
     this.enemies = []
-    this.currentWeapon = 'DEBUG_RAY'
     this.bloodEffect = new BloodEffect(scene)
-    
-    // Create projectile group
+    this.shootEffect = new ShootEffect(scene)
+
     this.projectiles = scene.physics.add.group()
-    
-    // Setup mouse tracking
     this.setupMouseTracking()
   }
 
@@ -51,7 +53,7 @@ export class WeaponManager {
       projectile.setData('lifetime', lifetime)
 
       if (lifetime <= 0) {
-        projectile.destroy()
+        this.expireProjectile(projectile)
         return
       }
 
@@ -59,68 +61,105 @@ export class WeaponManager {
         if (!enemy.active || !projectile.active) continue
 
         const distance = Phaser.Math.Distance.Between(projectile.x, projectile.y, enemy.x, enemy.y)
-        const hitRadius = Math.max((projectile.width + enemy.width) / 2, 12)
+        const hitRadius = Math.max((projectile.displayWidth + enemy.displayWidth) / 2, 12)
 
         if (distance <= hitRadius) {
-          // Create blood effect at impact point
-          const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y)
-          this.bloodEffect.spawnBlood(enemy.x, enemy.y, angle, 1)
-          
-          // Create impact effect
-          this.createImpactEffect(enemy.x, enemy.y, projectile.getData('color') ?? 0x00ff00)
-          
-          if ('takeDamage' in enemy && typeof enemy.takeDamage === 'function') {
-            enemy.takeDamage(projectile.getData('damage'))
+          if (projectile.getData('kind') === 'aoe') {
+            this.detonateAoe(projectile)
+          } else {
+            const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y)
+            this.bloodEffect.spawnBlood(enemy.x, enemy.y, angle, 1)
+            this.playImpactAt(projectile.x, projectile.y, projectile.getData('effectKey'), 1)
+            this.createImpactEffect(enemy.x, enemy.y, projectile.getData('color') ?? 0x00ff00)
+
+            if ('takeDamage' in enemy && typeof enemy.takeDamage === 'function') {
+              enemy.takeDamage(projectile.getData('damage'))
+            }
+            projectile.destroy()
           }
-          projectile.destroy()
           break
         }
       }
     })
   }
 
-  switchWeapon(weaponType: WeaponType) {
-    this.currentWeapon = weaponType
-    this.scene.events.emit('weaponChanged', GAME_CONFIG.WEAPONS[weaponType].name)
+  private expireProjectile(projectile: Phaser.Physics.Arcade.Image) {
+    if (projectile.getData('kind') === 'aoe') {
+      this.detonateAoe(projectile)
+      return
+    }
+
+    this.playImpactAt(projectile.x, projectile.y, projectile.getData('effectKey'), 0.8)
+    projectile.destroy()
+  }
+
+  private detonateAoe(projectile: Phaser.Physics.Arcade.Image) {
+    const x = projectile.x
+    const y = projectile.y
+    const radius = Number(projectile.getData('aoeRadius') ?? 120)
+    const damage = Number(projectile.getData('damage') ?? 0)
+    const color = projectile.getData('color') ?? 0xff3300
+    const effectKey = projectile.getData('effectKey')
+
+    projectile.destroy()
+    this.explodeAt(x, y, radius, damage, color, effectKey)
+  }
+
+  private explodeAt(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    color: number,
+    effectKey?: string
+  ) {
+    this.playImpactAt(x, y, effectKey, 2.2)
+
+    const circle = this.scene.add.graphics()
+    circle.setDepth(24)
+    circle.lineStyle(4, color, 0.9)
+    circle.strokeCircle(x, y, 12)
+
+    this.scene.tweens.add({
+      targets: circle,
+      alpha: 0,
+      duration: 320,
+      onUpdate: (tween) => {
+        const progress = tween.progress
+        circle.clear()
+        circle.lineStyle(3, color, 0.85 * (1 - progress))
+        circle.strokeCircle(x, y, 12 + progress * (radius - 12))
+      },
+      onComplete: () => circle.destroy()
+    })
+
+    this.enemies.forEach(enemy => {
+      if (!enemy.active) return
+
+      const distance = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y)
+      if (distance < radius) {
+        this.bloodEffect.spawnBlood(enemy.x, enemy.y, 0, 0.7)
+        this.createImpactEffect(enemy.x, enemy.y, color)
+
+        if ('takeDamage' in enemy) {
+          (enemy as any).takeDamage(damage)
+        }
+      }
+    })
   }
 
   private createImpactEffect(x: number, y: number, color: number) {
-    // Flash effect
     const flash = this.scene.add.circle(x, y, 5, color)
     flash.setAlpha(0.8)
     flash.setDepth(6)
-    
+
     this.scene.tweens.add({
       targets: flash,
       alpha: 0,
       scale: 0.1,
       duration: 200,
       ease: 'Quad.easeOut',
-      onComplete: () => {
-        flash.destroy()
-      }
-    })
-    
-    // Expand ring
-    const ring = this.scene.add.graphics()
-    ring.setDepth(5)
-    ring.lineStyle(2, color, 0.8)
-    ring.strokeCircle(x, y, 3)
-    
-    this.scene.tweens.add({
-      targets: ring,
-      alpha: 0,
-      onUpdate: (tween) => {
-        const progress = tween.progress
-        ring.clear()
-        ring.lineStyle(2, color, 0.8 * (1 - progress))
-        ring.strokeCircle(x, y, 3 + progress * 12)
-      },
-      duration: 300,
-      ease: 'Quad.easeOut',
-      onComplete: () => {
-        ring.destroy()
-      }
+      onComplete: () => flash.destroy()
     })
   }
 
@@ -133,174 +172,138 @@ export class WeaponManager {
     )
   }
 
+  private getResolvedAimAngle(): number {
+    if (this.player.getAimAngle && typeof this.player.getAimAngle === 'function') {
+      return this.player.getAimAngle()
+    }
+    return this.getAimAngle()
+  }
+
+  private getMuzzlePosition(): Phaser.Math.Vector2 {
+    if (this.player.getGunPosition && typeof this.player.getGunPosition === 'function') {
+      return this.player.getGunPosition()
+    }
+    return new Phaser.Math.Vector2(this.player.x, this.player.y)
+  }
+
+  private getEffectKey(gunTexture: string): string {
+    return (GAME_CONFIG.FLASH_MAPPING as Record<string, string>)[gunTexture] ?? 'effect_6'
+  }
+
+  private triggerFireAnimation(weaponType: string) {
+    if (!this.player.playFireAnimation) return
+
+    switch (weaponType) {
+      case 'RAPID_FIRE':
+        this.player.playFireAnimation(60)
+        break
+      case 'SPREAD_SHOT':
+        this.player.playFireAnimation(100)
+        break
+      case 'AOE_BLAST':
+        this.player.playFireAnimation(200)
+        break
+      default:
+        this.player.playFireAnimation(80)
+    }
+  }
+
+  private spawnMuzzleFlash(gunTexture: string, angle: number) {
+    const muzzle = this.getMuzzlePosition()
+    this.shootEffect.playMuzzle(muzzle.x, muzzle.y, angle, this.getEffectKey(gunTexture))
+  }
+
+  private playImpactAt(x: number, y: number, effectKey: string | undefined, scale: number) {
+    if (!effectKey) return
+    this.shootEffect.playImpact(x, y, effectKey, scale)
+  }
+
   fire() {
     const now = Date.now()
-    const weaponConfig = GAME_CONFIG.WEAPONS[this.currentWeapon]
+
+    let weaponType = 'RAPID_FIRE'
+    if (this.player.getCurrentWeaponType && typeof this.player.getCurrentWeaponType === 'function') {
+      weaponType = this.player.getCurrentWeaponType()
+    }
+
+    const weaponConfig = GAME_CONFIG.WEAPONS[weaponType as keyof typeof GAME_CONFIG.WEAPONS]
+    if (!weaponConfig) return
 
     if (now - this.lastFireTime < weaponConfig.fireRate) return
-
     this.lastFireTime = now
+
+    let gunTexture = 'gun_1'
+    if (this.player.getCurrentGunTexture) {
+      gunTexture = this.player.getCurrentGunTexture()
+    }
+
+    const angle = this.getResolvedAimAngle()
+    this.triggerFireAnimation(weaponType)
+    this.spawnMuzzleFlash(gunTexture, angle)
 
     switch (weaponConfig.type) {
       case 'projectile':
-        this.fireDebugRay()
+        this.fireRapidFire(weaponConfig as typeof GAME_CONFIG.WEAPONS.RAPID_FIRE, gunTexture, angle)
         break
       case 'aoe':
-        this.fireFirewallBurst()
+        this.fireAoeBlast(weaponConfig as typeof GAME_CONFIG.WEAPONS.AOE_BLAST, gunTexture, angle)
         break
       case 'spread':
-        this.firePacketStorm()
-        break
-      case 'melee':
-        this.fireCompilerBlade()
+        this.fireSpreadShot(weaponConfig as typeof GAME_CONFIG.WEAPONS.SPREAD_SHOT, gunTexture, angle)
         break
     }
   }
 
-  private spawnProjectile(angle: number, config: any, size: number = config.size, speed: number = config.speed) {
-    // Try to get gun position, otherwise use player position
-    let spawnX = this.player.x
-    let spawnY = this.player.y
-    
-    if (this.player.getGunPosition && typeof this.player.getGunPosition === 'function') {
-      const gunPos = this.player.getGunPosition()
-      spawnX = gunPos.x
-      spawnY = gunPos.y
-    }
-    
-    const projectile = this.projectiles.create(spawnX, spawnY, 'player')
-    projectile.setDisplaySize(size * 2, size * 2)
-    projectile.setTint(config.color)
+  private spawnProjectile(
+    angle: number,
+    config: { damage: number; color: number; range?: number },
+    size: number,
+    speed: number,
+    gunTexture: string,
+    kind: 'bullet' | 'aoe' = 'bullet'
+  ) {
+    const spawn = this.getMuzzlePosition()
+    const bulletKey = (GAME_CONFIG.BULLET_MAPPING as Record<string, string | null>)[gunTexture]
+    const textureKey = bulletKey && this.scene.textures.exists(bulletKey) ? bulletKey : 'bullet_invisible'
+    const effectKey = this.getEffectKey(gunTexture)
+
+    const projectile = this.projectiles.create(spawn.x, spawn.y, textureKey) as Phaser.Physics.Arcade.Image
+    const display = kind === 'aoe' ? Math.max(size * 4, 16) : Math.max(size * 3, 10)
+    projectile.setDisplaySize(display, display)
+    projectile.setVisible(Boolean(bulletKey))
     projectile.setVelocity(
       Math.cos(angle) * speed,
       Math.sin(angle) * speed
     )
     projectile.setData('damage', config.damage)
-    projectile.setData('lifetime', config.range ? 1800 : 1200)
+    projectile.setData('lifetime', config.range ? Math.max(400, (config.range / speed) * 1000) : 1200)
     projectile.setData('color', config.color)
+    projectile.setData('kind', kind)
+    projectile.setData('effectKey', effectKey)
     projectile.setRotation(angle)
-    
+
     return projectile
   }
 
-  private fireDebugRay() {
-    const weaponConfig = GAME_CONFIG.WEAPONS.DEBUG_RAY
-    
-    // Use player's getAimAngle if available, otherwise fall back to manager's method
-    let angle = this.getAimAngle()
-    if (this.player.getAimAngle && typeof this.player.getAimAngle === 'function') {
-      angle = this.player.getAimAngle()
-    }
-    
-    const target = this.findClosestEnemy()
-
-    if (target) {
-      const aim = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y)
-      const projectile = this.spawnProjectile(aim, weaponConfig, weaponConfig.size, weaponConfig.speed)
-      projectile.setData('lifetime', 1400)
-    } else {
-      this.spawnProjectile(angle, weaponConfig)
-    }
+  private fireRapidFire(config: typeof GAME_CONFIG.WEAPONS.RAPID_FIRE, gunTexture: string, angle: number) {
+    this.spawnProjectile(angle, config, config.size, config.speed, gunTexture)
   }
 
-  private findClosestEnemy() {
-    let closest: Phaser.Physics.Arcade.Sprite | null = null
-    let shortestDistance = Number.MAX_VALUE
-
-    for (const enemy of this.enemies) {
-      if (!enemy.active) continue
-
-      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y)
-      if (distance < shortestDistance) {
-        shortestDistance = distance
-        closest = enemy
-      }
-    }
-
-    return closest
+  private fireAoeBlast(config: typeof GAME_CONFIG.WEAPONS.AOE_BLAST, gunTexture: string, angle: number) {
+    const projectile = this.spawnProjectile(angle, config, 6, 380, gunTexture, 'aoe')
+    projectile.setData('aoeRadius', config.radius)
+    projectile.setData('lifetime', 900)
   }
 
-  private fireFirewallBurst() {
-    const weaponConfig = GAME_CONFIG.WEAPONS.FIREWALL_BURST
-
-    const circle = this.scene.add.graphics()
-    circle.lineStyle(4, weaponConfig.color)
-    circle.strokeCircle(this.player.x, this.player.y, 10)
-
-    this.scene.tweens.add({
-      targets: circle,
-      scale: weaponConfig.radius / 10,
-      duration: 300,
-      onComplete: () => {
-        circle.destroy()
-      }
-    })
-
-    this.enemies.forEach(enemy => {
-      if (!enemy.active) return
-
-      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y)
-      if (distance < weaponConfig.radius) {
-        // Blood effect for AOE hit
-        this.bloodEffect.spawnBlood(enemy.x, enemy.y, 0, 0.7)
-        this.createImpactEffect(enemy.x, enemy.y, weaponConfig.color)
-        
-        if ('takeDamage' in enemy) {
-          (enemy as any).takeDamage(weaponConfig.damage)
-        }
-      }
-    })
-  }
-
-  private firePacketStorm() {
-    const weaponConfig = GAME_CONFIG.WEAPONS.PACKET_STORM
-    const baseAngle = this.getAimAngle()
+  private fireSpreadShot(config: typeof GAME_CONFIG.WEAPONS.SPREAD_SHOT, gunTexture: string, angle: number) {
     const spreadAngle = Math.PI / 4
-    const startAngle = baseAngle - spreadAngle / 2
+    const startAngle = angle - spreadAngle / 2
+    const count = config.projectileCount
 
-    for (let i = 0; i < weaponConfig.projectileCount; i++) {
-      const angle = startAngle + (spreadAngle / (weaponConfig.projectileCount - 1)) * i
-      const projectile = this.spawnProjectile(angle, weaponConfig, weaponConfig.size, weaponConfig.speed)
-      projectile.setData('lifetime', 1500)
+    for (let i = 0; i < count; i++) {
+      const pelletAngle = count === 1 ? angle : startAngle + (spreadAngle / (count - 1)) * i
+      const projectile = this.spawnProjectile(pelletAngle, config, config.size, config.speed, gunTexture)
+      projectile.setData('lifetime', 700)
     }
-  }
-
-  private fireCompilerBlade() {
-    const weaponConfig = GAME_CONFIG.WEAPONS.COMPILER_BLADE
-    
-    let angle = this.getAimAngle()
-    if (this.player.getAimAngle && typeof this.player.getAimAngle === 'function') {
-      angle = this.player.getAimAngle()
-    }
-
-    const blade = this.scene.add.graphics()
-    blade.fillStyle(weaponConfig.color, 0.8)
-    blade.beginPath()
-    blade.arc(this.player.x, this.player.y, weaponConfig.radius, angle - Math.PI / 4, angle + Math.PI / 4)
-    blade.fillPath()
-
-    this.scene.time.delayedCall(200, () => {
-      blade.destroy()
-    })
-
-    this.enemies.forEach(enemy => {
-      if (!enemy.active) return
-
-      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y)
-      if (distance < weaponConfig.radius) {
-        const enemyAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y)
-        const angleDiff = Math.abs(Phaser.Math.Angle.Wrap(angle - enemyAngle))
-
-        if (angleDiff < Math.PI / 4) {
-          // Blood effect for melee hit
-          this.bloodEffect.spawnBlood(enemy.x, enemy.y, enemyAngle, 1.2)
-          this.createImpactEffect(enemy.x, enemy.y, weaponConfig.color)
-          
-          if ('takeDamage' in enemy) {
-            (enemy as any).takeDamage(weaponConfig.damage)
-          }
-        }
-      }
-    })
   }
 }
