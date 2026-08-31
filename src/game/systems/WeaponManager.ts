@@ -190,9 +190,13 @@ export class WeaponManager {
     return (GAME_CONFIG.FLASH_MAPPING as Record<string, string>)[gunTexture] ?? 'effect_6'
   }
 
-  private spawnMuzzleFlash(gunTexture: string, angle: number) {
-    const muzzle = this.getMuzzlePosition()
-    this.shootEffect.playMuzzle(muzzle.x, muzzle.y, angle, this.getEffectKey(gunTexture))
+  private spawnMuzzleFlash(gunTexture: string, angle: number, x?: number, y?: number) {
+    const muzzle = x !== undefined && y !== undefined ? { x, y } : this.getMuzzlePosition()
+    const flipX = this.player.flipX
+    const muzzleOffset = flipX ? 50 : 10
+    const muzzleX = muzzle.x + muzzleOffset * Math.cos(angle)
+    const muzzleY = muzzle.y + muzzleOffset * Math.sin(angle)
+    this.shootEffect.playMuzzle(muzzleX, muzzleY, angle, this.getEffectKey(gunTexture))
   }
 
   private playImpactAt(x: number, y: number, effectKey: string | undefined, scale: number) {
@@ -221,7 +225,6 @@ export class WeaponManager {
 
     const angle = this.getResolvedAimAngle()
     // this.triggerFireAnimation(weaponType) // Disabled to prevent gun recoil
-    this.spawnMuzzleFlash(gunTexture, angle)
 
     switch (weaponConfig.type) {
       case 'projectile':
@@ -244,38 +247,48 @@ export class WeaponManager {
     gunTexture: string,
     kind: 'bullet' | 'aoe' = 'bullet'
   ) {
-    const spawn = this.getMuzzlePosition()
+    const muzzle = this.getMuzzlePosition()
+    const flipX = this.player.flipX
+    const muzzleOffset = flipX ? -30 : 10
+    const spawnX = muzzle.x + muzzleOffset * Math.cos(angle)
+    const spawnY = muzzle.y + muzzleOffset * Math.sin(angle)
+
     const bulletKey = (GAME_CONFIG.BULLET_MAPPING as Record<string, string | null>)[gunTexture]
     const textureKey = bulletKey && this.scene.textures.exists(bulletKey) ? bulletKey : 'bullet_invisible'
     const effectKey = this.getEffectKey(gunTexture)
 
-    const projectile = this.projectiles.create(spawn.x, spawn.y, textureKey) as Phaser.Physics.Arcade.Image
+    const projectile = this.projectiles.create(spawnX, spawnY, textureKey) as Phaser.Physics.Arcade.Image
     const display = kind === 'aoe' ? Math.max(size * 4, 16) : Math.max(size * 3, 10)
     projectile.setDisplaySize(display, display)
     projectile.setVisible(Boolean(bulletKey))
     projectile.setOrigin(0.5, 0.5)
-    projectile.setVelocity(
-      Math.cos(angle) * speed,
-      Math.sin(angle) * speed
-    )
+    projectile.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed)
     projectile.setData('damage', config.damage)
     projectile.setData('lifetime', config.range ? Math.max(400, (config.range / speed) * 1000) : 1200)
     projectile.setData('color', config.color)
     projectile.setData('kind', kind)
     projectile.setData('effectKey', effectKey)
-    projectile.setRotation(angle) // Rotate projectile to match gun direction
+    projectile.setData('spawnX', spawnX)
+    projectile.setData('spawnY', spawnY)
+    projectile.setRotation(angle)
 
     return projectile
   }
 
   private fireRapidFire(config: typeof GAME_CONFIG.WEAPONS.RAPID_FIRE, gunTexture: string, angle: number) {
-    this.spawnProjectile(angle, config, config.size, config.speed, gunTexture)
+    const projectile = this.spawnProjectile(angle, config, config.size, config.speed, gunTexture)
+    const spawnX = projectile.getData('spawnX')
+    const spawnY = projectile.getData('spawnY')
+    this.spawnMuzzleFlash(gunTexture, angle, spawnX, spawnY)
   }
 
   private fireAoeBlast(config: typeof GAME_CONFIG.WEAPONS.AOE_BLAST, gunTexture: string, angle: number) {
     const projectile = this.spawnProjectile(angle, config, 6, 380, gunTexture, 'aoe')
     projectile.setData('aoeRadius', config.radius)
     projectile.setData('lifetime', 900)
+    const spawnX = projectile.getData('spawnX')
+    const spawnY = projectile.getData('spawnY')
+    this.spawnMuzzleFlash(gunTexture, angle, spawnX, spawnY)
   }
 
   private fireSpreadShot(config: typeof GAME_CONFIG.WEAPONS.SPREAD_SHOT, gunTexture: string, angle: number) {
@@ -287,6 +300,11 @@ export class WeaponManager {
       const pelletAngle = count === 1 ? angle : startAngle + (spreadAngle / (count - 1)) * i
       const projectile = this.spawnProjectile(pelletAngle, config, config.size, config.speed, gunTexture)
       projectile.setData('lifetime', 700)
+      if (i === 0) {
+        const spawnX = projectile.getData('spawnX')
+        const spawnY = projectile.getData('spawnY')
+        this.spawnMuzzleFlash(gunTexture, angle, spawnX, spawnY)
+      }
     }
   }
 }
