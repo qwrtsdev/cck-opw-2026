@@ -1,18 +1,24 @@
 import { Marquee } from "@/components/ui/marquee"
 import { useEffect, useState } from "react"
-import QRCode from "react-qr-code"
 import { useNavigate } from "react-router"
-import { supabase } from "../lib/supabaseClient"
+import QRCode from "react-qr-code"
+import toast, { Toaster } from 'react-hot-toast';
 
+import { supabase } from "@/lib/supabase"
+import { sessionManager } from "@/lib/sessionManager"
+
+import type { Session, PlayerItem } from "@/types/game"
+
+import { Marquee } from "@/components/ui/marquee"
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
 import { Loader2, Play, Smartphone } from 'lucide-react'
 
 import ccklogo from "@/assets/cck-logo.png"
-import place_1 from "../assets/place-1.png"
-import place_2 from "../assets/place-2.png"
-import place_3 from "../assets/place-3.png"
+import place_1 from "@/assets/place-1.png"
+import place_2 from "@/assets/place-2.png"
+import place_3 from "@/assets/place-3.png"
 
-const placeImages = [place_1, place_2, place_3]
+const badgeImages = [place_1, place_2, place_3]
 const PLACE_COUNT = 5
 
 const rankStyles = [
@@ -21,14 +27,12 @@ const rankStyles = [
   "bg-orange-400/10 border border-orange-400/30",
 ]
 
-type Player = {
-  id?: string
-  name: string
+type ScoreRow = {
+  player_name: string
   score: number | string
-  isPlaceholder?: boolean
 }
 
-function padPlayers(players: Player[]): Player[] {
+function padPlayers(players: PlayerItem[]): PlayerItem[] {
   return Array.from({ length: PLACE_COUNT }, (_, idx) =>
     players[idx] ?? {
       id: `placeholder-${idx}`,
@@ -40,55 +44,82 @@ function padPlayers(players: Player[]): Player[] {
 }
 
 function Home() {
-  const navigate = useNavigate()
-  const [qr, setQr] = useState('')
-  const [players, setPlayers] = useState<Player[]>([])
-  const [qrLoading, setQrLoading] = useState(true)
+  const [session, setSession] = useState<Session | null>(null)
+  const [leaderboard, setLeaderboard] = useState<PlayerItem[]>([])
   const [scoreLoading, setScoreLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    generateId()
+    sessionManager()
+      .then(setSession)
+
     getLeaderboard()
   }, [])
 
-  async function generateId() {
-    const uuid = await crypto.randomUUID();
-    const url = `${window.location.origin}/play?id=${uuid}`;
+  useEffect(() => {
+    if (!session?.id) return
 
-    setQr(url)
-    setQrLoading(false)
-  }
+    if (session.status === 'playing') {
+      navigate(`/game?id=${session.id}`)
+      return
+    }
+
+    const channel = supabase
+      .channel(`session-${session.id}`)
+      .on('postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'sessions',
+          filter: `id=eq.${session.id}`,
+        },
+        (payload: { new: Session }) => { if (payload.new.status === 'playing') navigate(`/game?id=${session.id}`) }
+      )
+      .subscribe()
+
+    return () => { void supabase.removeChannel(channel) }
+  }, [session?.id])
+
+  useEffect(() => {
+    if (!session?.id) return
+
+    const timer = setTimeout(async () => {
+      await supabase.rpc('expire_session', { p_session_id: session.id })
+
+      const new_session = await sessionManager()
+      setSession(new_session)
+
+      if (new_session.status === 'playing') {
+        navigate(`/game?id=${new_session.id}`)
+      }
+    }, 10 * 60 * 1000)
+
+    return () => clearTimeout(timer)
+  }, [session?.id])
 
   async function getLeaderboard() {
-    try {
-      // Check if Supabase is properly configured
-      if (!supabase || !supabase.from) {
-        console.warn("Supabase not properly configured, skipping leaderboard")
-        setScoreLoading(false)
-        return
-      }
+    const { data, error } = await supabase
+      .from('scores')
+      .select('player_name, score')
+      .order('score', { ascending: false })
+      .limit(5)
 
-      const { data, error } = await supabase
-        .from('players')
-        .select('*')
-        .order('score', { ascending: false })
-        .limit(5)
-
-      if (error) {
-        console.warn("Supabase Error (leaderboard will show empty):", error.message)
-        setScoreLoading(false)
-        return
-      }
-
-      setPlayers(data || [])
-    } catch (err) {
-      console.warn("Failed to load leaderboard:", err instanceof Error ? err.message : String(err))
-    } finally {
+    if (error) {
+      console.error("Supabase Error:", error)
       setScoreLoading(false)
     }
+
+    setLeaderboard(((data || []) as ScoreRow[]).map((row) => ({
+      name: row.player_name,
+      score: row.score,
+    })))
+
+    setScoreLoading(false)
   }
 
-  const displayedPlayers = padPlayers(scoreLoading ? [] : players)
+  const qrLoading = !session
+  const qr = session ? `${window.location.origin}/control?id=${session.id}` : ''
+  const displayedPlayers = padPlayers(scoreLoading ? [] : leaderboard)
 
   return (
     <div className="bg-neutral-900 select-none relative w-screen h-screen flex flex-row">
@@ -168,7 +199,7 @@ function Home() {
                 >
                   <span className="flex items-center gap-3 text-5xl flex-1 min-w-0 overflow-hidden">
                     {idx < 3 && !player.isPlaceholder ? (
-                      <img src={placeImages[idx]} className="w-8 h-8 shrink-0" alt={`place ${idx + 1}`} />
+                      <img src={badgeImages[idx]} className="w-8 h-8 shrink-0" alt={`place ${idx + 1}`} />
                     ) : (
                       <p className="w-7 text-center text-gray-400 font-semibold shrink-0">{idx + 1}</p>
                     )}
