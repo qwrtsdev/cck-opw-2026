@@ -12,8 +12,7 @@ function ConfettiCanvas({ play }: { play: boolean }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
+    const canvas = ref.current!
     const ctx = canvas.getContext('2d')!
     let w = (canvas.width = window.innerWidth)
     let h = (canvas.height = window.innerHeight)
@@ -100,8 +99,8 @@ function ResultCard({
     <div
       className={
         fixedSize
-          ? "bg-neutral-950 border border-neutral-800 rounded-[48px] flex flex-col items-center justify-center gap-10 font-thai"
-          : "bg-neutral-950 border border-neutral-800 rounded-2xl p-8 flex flex-col items-center gap-6 font-thai w-full max-w-md"
+          ? "bg-neutral-950 border border-neutral-800 rounded-[48px] flex flex-col items-center justify-center gap-10 font-thai text-white"
+          : "bg-neutral-950 border border-neutral-800 rounded-2xl p-8 flex flex-col items-center gap-6 font-thai w-full max-w-md text-white"
       }
       style={fixedSize ? { width: 1080, height: 1920, padding: 96 } : undefined}
     >
@@ -111,19 +110,61 @@ function ResultCard({
       <h1
         className={
           fixedSize
-            ? "font-bold tabular-nums tracking-tight text-white"
+            ? "font-bold tabular-nums tracking-tight"
             : "text-6xl font-bold tabular-nums tracking-tight"
         }
         style={fixedSize ? { fontSize: 220, lineHeight: 1 } : undefined}
       >
         {pad(score)}
       </h1>
-      <p className={fixedSize ? "text-5xl truncate max-w-[900px] text-white" : "text-xl truncate"}>
+      <p className={fixedSize ? "text-5xl truncate" : "text-xl truncate"}>
         {playerName}
       </p>
       <p className={fixedSize ? "text-2xl text-neutral-500 mt-4" : "text-sm text-neutral-500"}>
         {createdAt}
       </p>
+    </div>
+  )
+}
+
+// Export-only variant — plain inline styles, no Tailwind color utilities,
+// so nothing depends on how html-to-image serializes computed CSS colors.
+function ExportResultCard({
+  score,
+  playerName,
+  createdAt,
+}: {
+  score: number
+  playerName: string
+  createdAt: string
+}) {
+  return (
+    <div
+      style={{
+        width: 1080,
+        height: 1920,
+        background: '#0a0a0a',
+        border: '1px solid #262626',
+        borderRadius: 48,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 40,
+        padding: 96,
+        boxSizing: 'border-box',
+        fontFamily: 'inherit', // keep whatever font-thai resolves to via className below
+      }}
+      className="font-thai"
+    >
+      <p style={{ color: '#a3a3a3', fontSize: 30, margin: 0 }}>ผลการเล่น</p>
+      <h1 style={{ color: '#ffffff', fontWeight: 700, fontSize: 220, lineHeight: 1, margin: 0 }}>
+        {pad(score)}
+      </h1>
+      <p style={{ color: '#ffffff', fontSize: 48, margin: 0, maxWidth: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {playerName}
+      </p>
+      <p style={{ color: '#737373', fontSize: 24, marginTop: 16 }}>{createdAt}</p>
     </div>
   )
 }
@@ -204,12 +245,14 @@ function EndScreen() {
     if (!exportRef.current) return
     setDownloading(true)
     try {
+      await document.fonts.ready // ensure font-thai is actually loaded before rasterizing
       const { toPng } = await import('html-to-image')
       const dataUrl = await toPng(exportRef.current, {
         width: 1080,
         height: 1920,
-        pixelRatio: 1, // node is already at target resolution — don't let devicePixelRatio scale it further
+        pixelRatio: 1,
         backgroundColor: '#0a0a0a',
+        cacheBust: true, // avoids stale/cross-origin cached assets breaking capture
       })
       const a = document.createElement('a')
       a.href = dataUrl
@@ -264,9 +307,7 @@ function EndScreen() {
           ref={exportRef}
           style={{ position: 'fixed', top: 0, left: '-9999px', width: 1080, height: 1920 }}
         >
-          <div className="w-full h-full bg-neutral-900 flex items-center justify-center">
-            <ResultCard score={score} playerName={playerName} createdAt={createdAt} fixedSize />
-          </div>
+          <ExportResultCard score={score} playerName={playerName} createdAt={createdAt} />
         </div>
       )}
     </div>
