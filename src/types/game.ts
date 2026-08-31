@@ -2,8 +2,8 @@ export type Session = {
     id: string
     status?: string
     player_id?: string
-    created_at: string;
-    profiles: { display_name: string } | null;
+    created_at?: string;
+    profiles?: { display_name: string } | null;
 }
 
 export type PlayerItem = {
