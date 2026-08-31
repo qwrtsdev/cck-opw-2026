@@ -166,8 +166,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   getMaxHealth() { return this.maxHealth }
 
   getGunPosition(): Phaser.Math.Vector2 {
-    const facingLeft = Math.abs(this.currentAngle) > Math.PI / 2
-    const muzzleOffset = facingLeft ? -25 : 25
+    const muzzleOffset = 20
     
     const p = this.weaponContainer.getWorldTransformMatrix().transformPoint(
       this.gun.x + muzzleOffset,
