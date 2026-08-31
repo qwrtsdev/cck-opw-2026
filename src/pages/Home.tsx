@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import QRCode from "react-qr-code"
+import toast, { Toaster } from 'react-hot-toast';
+
 import { supabase } from "@/lib/supabase"
 import { sessionManager } from "@/lib/sessionManager"
-import { Marquee } from "@/components/ui/marquee"
 
 import type { Session, PlayerItem } from "@/types/game"
 
+import { Marquee } from "@/components/ui/marquee"
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
 import { Loader2, Smartphone } from 'lucide-react';
 
