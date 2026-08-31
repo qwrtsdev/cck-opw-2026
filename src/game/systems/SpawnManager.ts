@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { GAME_CONFIG } from '../config'
 import { Enemy } from '../entities/Enemy'
 import { WeaponPickup } from '../entities/WeaponPickup'
+import { HealthPickup } from '../entities/HealthPickup'
 
 type EnemyType = keyof typeof GAME_CONFIG.ENEMIES
 
@@ -10,13 +11,13 @@ export class SpawnManager {
   private player: Phaser.Physics.Arcade.Sprite
   private enemies: Phaser.Physics.Arcade.Sprite[]
   private weaponPickups: WeaponPickup[] = []
+  private healthPickups: HealthPickup[] = []
   private elapsedTime: number = 0
   private spawnTimer: Phaser.Time.TimerEvent
   private currentSpawnInterval: number
   private enemyHpMultiplier: number = 1
   private availableEnemyTypes: EnemyType[] = ['BUG']
   private lastDifficultyIncrease: number = 0
-  private weaponSpawnInterval: number = 8000 // Spawn weapon every 8 seconds
   private spawnCount: number = 1
 
   constructor(scene: Phaser.Scene, player: Phaser.Physics.Arcade.Sprite) {
@@ -29,14 +30,6 @@ export class SpawnManager {
     this.spawnTimer = scene.time.addEvent({
       delay: this.currentSpawnInterval,
       callback: this.spawnEnemy,
-      callbackScope: this,
-      loop: true
-    })
-
-    // Start weapon spawn timer
-    scene.time.addEvent({
-      delay: this.weaponSpawnInterval,
-      callback: this.spawnWeapon,
       callbackScope: this,
       loop: true
     })
@@ -131,23 +124,37 @@ export class SpawnManager {
     }
   }
 
-  private spawnWeapon() {
-    if (!this.player.active) return
+  public dropLoot(x: number, y: number) {
+    // 30% chance to drop weapon, 20% chance to drop health
+    const weaponChance = 0.3
+    const healthChance = 0.2
+    const random = Math.random()
 
-    const camera = this.scene.cameras.main
-    
-    // Spawn in random location within camera view, slightly off-screen
-    const randomX = camera.worldView.x + Math.random() * camera.worldView.width
-    const randomY = camera.worldView.y + Math.random() * camera.worldView.height
+    if (random < weaponChance) {
+      this.spawnWeaponAt(x, y)
+    } else if (random < weaponChance + healthChance) {
+      this.spawnHealthAt(x, y)
+    }
+  }
 
+  private spawnWeaponAt(x: number, y: number) {
     const gunOptions = ['gun_1', 'gun_2', 'gun_3', 'gun_4', 'gun_5', 'gun_6', 'gun_7', 'gun_8', 'gun_9', 'gun_10']
     const randomGun = gunOptions[Math.floor(Math.random() * gunOptions.length)]
 
-    const weapon = new WeaponPickup(this.scene, randomX, randomY, randomGun)
+    const weapon = new WeaponPickup(this.scene, x, y, randomGun)
     this.weaponPickups.push(weapon)
 
-    console.log('Weapon spawned:', randomGun, 'at', randomX, randomY)
+    console.log('Weapon dropped:', randomGun, 'at', x, y)
   }
+
+  private spawnHealthAt(x: number, y: number) {
+    const health = new HealthPickup(this.scene, x, y)
+    this.healthPickups.push(health)
+
+    console.log('Health dropped at', x, y)
+  }
+
+
 
   private selectEnemyType(): EnemyType {
     // Weighted random selection
@@ -180,6 +187,17 @@ export class SpawnManager {
     const index = this.weaponPickups.indexOf(weapon)
     if (index > -1) {
       this.weaponPickups.splice(index, 1)
+    }
+  }
+
+  getHealthPickups() {
+    return this.healthPickups
+  }
+
+  removeHealthPickup(health: HealthPickup) {
+    const index = this.healthPickups.indexOf(health)
+    if (index > -1) {
+      this.healthPickups.splice(index, 1)
     }
   }
 

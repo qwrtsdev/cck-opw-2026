@@ -59,6 +59,7 @@ export class GameScene extends Phaser.Scene {
       this.score += score
       this.kills++
       this.spawnManager.removeEnemy(enemy)
+      this.spawnManager.dropLoot(enemy.x, enemy.y)
       this.events.emit('scoreChanged', this.score, this.kills)
     })
 
@@ -154,6 +155,13 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
+    // Update health pickups
+    this.spawnManager.getHealthPickups().forEach(health => {
+      if (health.active) {
+        health.update()
+      }
+    })
+
     // Check collision between player and weapon pickups
     this.spawnManager.getWeaponPickups().forEach(weapon => {
       if (weapon.active) {
@@ -172,6 +180,28 @@ export class GameScene extends Phaser.Scene {
           
           weapon.destroy()
           this.spawnManager.removeWeaponPickup(weapon)
+        }
+      }
+    })
+
+    // Check collision between player and health pickups
+    this.spawnManager.getHealthPickups().forEach(health => {
+      if (health.active) {
+        const distance = Phaser.Math.Distance.Between(
+          this.player.x, this.player.y,
+          health.x, health.y
+        )
+        
+        if (distance < 30) {
+          // Player picked up health
+          const healAmount = health.getHealAmount()
+          this.player.heal(healAmount)
+          
+          // Show pickup message
+          this.events.emit('healthPickedUp', healAmount)
+          
+          health.destroy()
+          this.spawnManager.removeHealthPickup(health)
         }
       }
     })

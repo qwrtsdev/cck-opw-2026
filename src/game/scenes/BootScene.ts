@@ -128,6 +128,17 @@ export class BootScene extends Phaser.Scene {
       g.destroy()
     }
 
+    // Create health pickup texture (red cross)
+    if (!this.textures.exists('health_pickup')) {
+      const healthG = this.add.graphics()
+      healthG.fillStyle(0xff0000, 1)
+      // Draw a simple red cross
+      healthG.fillRect(10, 4, 4, 16) // Vertical bar
+      healthG.fillRect(4, 10, 16, 4) // Horizontal bar
+      healthG.generateTexture('health_pickup', 24, 24)
+      healthG.destroy()
+    }
+
     for (const n of [6, 7, 8, 9, 10]) {
       for (const suffix of [1, 2]) {
         this.anims.create({
