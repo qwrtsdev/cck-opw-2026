@@ -1,3 +1,4 @@
+import { Marquee } from "@/components/ui/marquee"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import QRCode from "react-qr-code"
@@ -10,7 +11,7 @@ import type { Session, PlayerItem } from "@/types/game"
 
 import { Marquee } from "@/components/ui/marquee"
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
-import { Loader2, Smartphone } from 'lucide-react';
+import { Loader2, Play, Smartphone } from 'lucide-react'
 
 import ccklogo from "@/assets/cck-logo.png"
 import place_1 from "@/assets/place-1.png"
@@ -106,7 +107,6 @@ function Home() {
     if (error) {
       console.error("Supabase Error:", error)
       setScoreLoading(false)
-      return
     }
 
     setLeaderboard(((data || []) as ScoreRow[]).map((row) => ({
@@ -159,6 +159,15 @@ function Home() {
                 />)}
             </div>
             <p className="text-2xl"><Smartphone className="inline mr-3" />แสกนเพื่อเล่นเกม</p>
+            
+            {/* Direct game access button for testing */}
+            <button
+              onClick={() => navigate('/game')}
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-lg transition-colors"
+            >
+              <Play className="w-5 h-5" />
+              เข้าเกมโดยตรง (Test)
+            </button>
           </div>
 
           <Marquee repeat={4} reverse={true} className="w-full text-white font-pixel text-8xl shrink-0 flex flex-row justify-center items-center">

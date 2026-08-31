@@ -3,7 +3,10 @@ import { useSearchParams } from 'react-router'
 import Phaser from 'phaser'
 
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
-import { supabase } from "@/lib/supabase"
+import { BootScene } from '@/game/scenes/BootScene'
+import { GameScene } from '@/game/scenes/GameScene'
+import { UIScene } from '@/game/scenes/UIScene'
+import { GameOverScene } from '@/game/scenes/GameOverScene'
 
 export default function PhaserGame() {
   const [params] = useSearchParams();
@@ -18,34 +21,37 @@ export default function PhaserGame() {
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return
 
-    class MainScene extends Phaser.Scene {
-      constructor() {
-        super("main")
-      }
-
-      create() {
-        this.add.text(100, 100, `Hello World`)
-        // debug overlay — shows the raw last-received payload on the canvas itself
-        debugTextRef.current = this.add.text(20, 20, 'waiting for input...', {
-          fontSize: '16px',
-          color: '#00ff00',
-          backgroundColor: '#000000',
-          padding: { x: 8, y: 6 },
-        })
-      }
+    try {
+      gameRef.current = new Phaser.Game({
+        type: Phaser.AUTO,
+        width: 1400,
+        height: 900,
+        parent: containerRef.current,
+        backgroundColor: '#1a1a2e',
+        scene: [BootScene, GameScene, UIScene, GameOverScene],
+        physics: {
+          default: 'arcade',
+          arcade: {
+            gravity: { x: 0, y: 0 },
+            debug: false
+          }
+        },
+        scale: {
+          mode: Phaser.Scale.FIT,
+          autoCenter: Phaser.Scale.CENTER_BOTH
+        }
+      })
+      
+      console.log('Phaser game initialized successfully')
+    } catch (error) {
+      console.error('Error initializing Phaser game:', error)
     }
 
-    gameRef.current = new Phaser.Game({
-      type: Phaser.AUTO,
-      width: 1400,
-      height: 900,
-      parent: containerRef.current,
-      scene: [MainScene],
-    })
-
     return () => {
-      gameRef.current?.destroy(true)
-      gameRef.current = null
+      if (gameRef.current) {
+        gameRef.current.destroy(true)
+        gameRef.current = null
+      }
     }
   }, [])
 
