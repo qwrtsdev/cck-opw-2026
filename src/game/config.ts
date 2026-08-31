@@ -96,18 +96,18 @@ export const GAME_CONFIG = {
     'gun_9': 'AOE_BLAST'
   } as const,
 
-  // Fired projectile sprites (*_2). Guns without _2 use an invisible bullet.
+  // Fired projectile sprites (normal versions, not _2). Guns without bullets use an invisible bullet.
   BULLET_MAPPING: {
-    'gun_1':  'bullet_1_2',
-    'gun_2':  'bullet_2_2',
-    'gun_3':  'bullet_3_2',
-    'gun_4':  'bullet_4_2',
-    'gun_5':  'bullet_5_2',
-    'gun_6':  'bullet_6_2',
-    'gun_7':  'bullet_7_2',
+    'gun_1':  'bullet_1',
+    'gun_2':  'bullet_2',
+    'gun_3':  'bullet_3',
+    'gun_4':  'bullet_4',
+    'gun_5':  'bullet_5',
+    'gun_6':  'bullet_6',
+    'gun_7':  'bullet_7',
     'gun_8':  null,
-    'gun_9':  'bullet_9_2',
-    'gun_10': 'bullet_10_2',
+    'gun_9':  'bullet_9',
+    'gun_10': 'bullet_10',
   } as const,
 
   // Shoot-effect strips exist only for 6–10; reuse by weapon type.

@@ -190,24 +190,6 @@ export class WeaponManager {
     return (GAME_CONFIG.FLASH_MAPPING as Record<string, string>)[gunTexture] ?? 'effect_6'
   }
 
-  private triggerFireAnimation(weaponType: string) {
-    if (!this.player.playFireAnimation) return
-
-    switch (weaponType) {
-      case 'RAPID_FIRE':
-        this.player.playFireAnimation(60)
-        break
-      case 'SPREAD_SHOT':
-        this.player.playFireAnimation(100)
-        break
-      case 'AOE_BLAST':
-        this.player.playFireAnimation(200)
-        break
-      default:
-        this.player.playFireAnimation(80)
-    }
-  }
-
   private spawnMuzzleFlash(gunTexture: string, angle: number) {
     const muzzle = this.getMuzzlePosition()
     this.shootEffect.playMuzzle(muzzle.x, muzzle.y, angle, this.getEffectKey(gunTexture))
@@ -238,7 +220,7 @@ export class WeaponManager {
     }
 
     const angle = this.getResolvedAimAngle()
-    this.triggerFireAnimation(weaponType)
+    // this.triggerFireAnimation(weaponType) // Disabled to prevent gun recoil
     this.spawnMuzzleFlash(gunTexture, angle)
 
     switch (weaponConfig.type) {
@@ -271,6 +253,7 @@ export class WeaponManager {
     const display = kind === 'aoe' ? Math.max(size * 4, 16) : Math.max(size * 3, 10)
     projectile.setDisplaySize(display, display)
     projectile.setVisible(Boolean(bulletKey))
+    projectile.setOrigin(0.5, 0.5)
     projectile.setVelocity(
       Math.cos(angle) * speed,
       Math.sin(angle) * speed
@@ -280,7 +263,7 @@ export class WeaponManager {
     projectile.setData('color', config.color)
     projectile.setData('kind', kind)
     projectile.setData('effectKey', effectKey)
-    projectile.setRotation(angle)
+    projectile.setRotation(angle) // Rotate projectile to match gun direction
 
     return projectile
   }
