@@ -161,11 +161,11 @@ export const GAME_CONFIG = {
   
   // Spawn settings
   SPAWN: {
-    INITIAL_INTERVAL: 1000, // Reduced from 2000 for testing
-    MIN_INTERVAL: 200, // Reduced from 300 for testing
-    INTERVAL_DECREASE_RATE: 15, // ms per second
-    DIFFICULTY_INCREASE_INTERVAL: 60, // seconds
-    HP_MULTIPLIER_PER_MINUTE: 0.15
+    INITIAL_INTERVAL: 800, // Reduced for faster initial spawn
+    MIN_INTERVAL: 150, // Reduced for more frequent spawning
+    INTERVAL_DECREASE_RATE: 25, // Increased rate for faster decrease
+    DIFFICULTY_INCREASE_INTERVAL: 45, // Reduced for more frequent difficulty increases
+    HP_MULTIPLIER_PER_MINUTE: 0.2
   },
   
   // Scoring

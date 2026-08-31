@@ -17,6 +17,7 @@ export class SpawnManager {
   private availableEnemyTypes: EnemyType[] = ['BUG']
   private lastDifficultyIncrease: number = 0
   private weaponSpawnInterval: number = 8000 // Spawn weapon every 8 seconds
+  private spawnCount: number = 1
 
   constructor(scene: Phaser.Scene, player: Phaser.Physics.Arcade.Sprite) {
     this.scene = scene
@@ -50,15 +51,17 @@ export class SpawnManager {
       GAME_CONFIG.SPAWN.INITIAL_INTERVAL - (this.elapsedTime * GAME_CONFIG.SPAWN.INTERVAL_DECREASE_RATE)
     )
     
-    // Update timer delay
-    this.spawnTimer.reset({
-      delay: this.currentSpawnInterval,
-      callback: this.spawnEnemy,
-      callbackScope: this,
-      loop: true
-    })
+    // Update timer delay only if it changed significantly
+    if (Math.abs(this.spawnTimer.delay - this.currentSpawnInterval) > 50) {
+      this.spawnTimer.reset({
+        delay: this.currentSpawnInterval,
+        callback: this.spawnEnemy,
+        callbackScope: this,
+        loop: true
+      })
+    }
     
-    // Increase difficulty every minute
+    // Increase difficulty based on time
     if (this.elapsedTime - this.lastDifficultyIncrease >= GAME_CONFIG.SPAWN.DIFFICULTY_INCREASE_INTERVAL) {
       this.increaseDifficulty()
       this.lastDifficultyIncrease = this.elapsedTime
@@ -68,6 +71,7 @@ export class SpawnManager {
   private increaseDifficulty() {
     // Increase enemy HP multiplier
     this.enemyHpMultiplier += GAME_CONFIG.SPAWN.HP_MULTIPLIER_PER_MINUTE
+    this.spawnCount += 2 // Increase spawn count by 2 instead of 1
     
     // Add new enemy types
     const allEnemyTypes: EnemyType[] = ['BUG', 'TROJAN', 'WORM', 'PACKET_SNIFFER', 'ROOTKIT']
@@ -83,46 +87,48 @@ export class SpawnManager {
   public spawnEnemy() {
     if (!this.player.active) return
 
-    const camera = this.scene.cameras.main
-    const spawnRect = new Phaser.Geom.Rectangle(
-      camera.worldView.x - 120,
-      camera.worldView.y - 120,
-      camera.worldView.width + 240,
-      camera.worldView.height + 240
-    )
+    for (let i = 0; i < this.spawnCount; i++) {
+      const camera = this.scene.cameras.main
+      const spawnRect = new Phaser.Geom.Rectangle(
+        camera.worldView.x - 120,
+        camera.worldView.y - 120,
+        camera.worldView.width + 240,
+        camera.worldView.height + 240
+      )
 
-    const visibleRect = new Phaser.Geom.Rectangle(
-      camera.worldView.x,
-      camera.worldView.y,
-      camera.worldView.width,
-      camera.worldView.height
-    )
+      const visibleRect = new Phaser.Geom.Rectangle(
+        camera.worldView.x,
+        camera.worldView.y,
+        camera.worldView.width,
+        camera.worldView.height
+      )
 
-    const spawnPoint = Phaser.Geom.Rectangle.RandomOutside(spawnRect, visibleRect)
+      const spawnPoint = Phaser.Geom.Rectangle.RandomOutside(spawnRect, visibleRect)
 
-    const enemyType = this.selectEnemyType()
-    const enemy = new Enemy(
-      this.scene,
-      spawnPoint.x,
-      spawnPoint.y,
-      enemyType,
-      this.player
-    )
+      const enemyType = this.selectEnemyType()
+      const enemy = new Enemy(
+        this.scene,
+        spawnPoint.x,
+        spawnPoint.y,
+        enemyType,
+        this.player
+      )
 
-    enemy.applyDifficultyMultiplier(this.enemyHpMultiplier)
-    this.enemies.push(enemy)
+      enemy.applyDifficultyMultiplier(this.enemyHpMultiplier)
+      this.enemies.push(enemy)
 
-    this.scene.physics.add.overlap(
-      enemy,
-      this.player,
-      () => {
-        if (enemy.active && this.player.active) {
-          enemy.damagePlayer()
+      this.scene.physics.add.overlap(
+        enemy,
+        this.player,
+        () => {
+          if (enemy.active && this.player.active) {
+            enemy.damagePlayer()
+          }
         }
-      }
-    )
+      )
 
-    console.log('Enemy spawned:', enemyType, 'at', spawnPoint.x, spawnPoint.y)
+      console.log('Enemy spawned:', enemyType, 'at', spawnPoint.x, spawnPoint.y)
+    }
   }
 
   private spawnWeapon() {
