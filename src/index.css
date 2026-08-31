@@ -32,6 +32,16 @@
   box-sizing: border-box;
 }
 
+.nipple .back {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.nipple .front {
+  background: #a3a3a3 !important;
+  /* tailwind neutral-400 */
+  z-index: 20 !important;
+}
+
 @layer base {
   .theme {
     --animate-marquee: marquee var(--duration) infinite linear;
