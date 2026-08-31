@@ -13,6 +13,7 @@ export default function PhaserGame() {
   const gameRef = useRef<Phaser.Game | null>(null)
   const debugTextRef = useRef<Phaser.GameObjects.Text | null>(null)
   const [lastInput, setLastInput] = useState<any>(null)
+  const [inputsByType, setInputsByType] = useState<Record<string, any>>({})
 
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return
@@ -61,11 +62,13 @@ export default function PhaserGame() {
       )
       .on('broadcast', { event: 'input' }, ({ payload }) => {
         console.log('[input]', payload)
-        setLastInput(payload)
+        setInputsByType(prev => ({ ...prev, [payload.type]: payload }))
 
         if (debugTextRef.current) {
           debugTextRef.current.setText(
-            `${payload.type} | player: ${payload.playerId?.slice(0, 8)}\n${JSON.stringify(payload.payload)}`
+            Object.entries({ ...inputsByType, [payload.type]: payload })
+              .map(([type, p]: [string, any]) => `${type}: ${JSON.stringify(p.payload)}`)
+              .join('\n')
           )
         }
       })
@@ -85,8 +88,13 @@ export default function PhaserGame() {
       <div ref={containerRef} className='border-white border-4 relative' />
 
       {/* plain HTML debug panel, outside the canvas — easier to read than squinting at Phaser text */}
-      <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-green-400 text-xs font-mono p-3 rounded max-w-sm break-all">
-        {lastInput ? JSON.stringify(lastInput, null, 2) : 'no input received yet'}
+      <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-green-400 text-xs font-mono p-3 rounded max-w-sm space-y-1">
+        {Object.keys(inputsByType).length === 0
+          ? 'no input received yet'
+          : Object.entries(inputsByType).map(([type, p]: [string, any]) => (
+            <div key={type}>{type}: {JSON.stringify(p.payload)}</div>
+          ))
+        }
       </div>
     </div>
   )

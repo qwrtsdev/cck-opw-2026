@@ -9,6 +9,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { Session, SessionStatus, Profile } from "@/types/game";
 
 import ccklogo from "@/assets/cck-logo.png"
+import TouchButton from "@/components/TouchButton";
 import { Loader2, Check, CircleAlert, Globe, GamepadDirectional } from "lucide-react";
 
 function Controller() {
@@ -135,14 +136,14 @@ function Controller() {
   useEffect(() => {
     if (status !== "playing") return;
 
-    const left: any = nipplejs.create({
+    const left = nipplejs.create({
       zone: document.getElementById('stick-left')!,
       mode: 'static',
       position: { left: '50%', top: '50%' },
       size: 140,
       color: '#a3a3a3',
     });
-    const right: any = nipplejs.create({
+    const right = nipplejs.create({
       zone: document.getElementById('stick-right')!,
       mode: 'static',
       position: { left: '50%', top: '50%' },
@@ -150,10 +151,19 @@ function Controller() {
       color: '#a3a3a3',
     });
 
-    left.on('move', (_evt: any, data: any) => sendInput('moveLeft', data));
-    left.on('end', () => sendInput('moveLeft', null));
-    right.on('move', (_evt: any, data: any) => sendInput('moveRight', data));
-    right.on('end', () => sendInput('moveRight', null));
+    const DEADZONE = 10; // px of stick travel before a direction counts — avoids jitter near center
+
+    (left as any).on('move', (_evt: any, data: any) => {
+      if (data.distance < DEADZONE) return;
+      sendInput('move', angleToDirection(data.angle.degree));
+    });
+    (left as any).on('end', () => sendInput('move', null));
+
+    (right as any).on('move', (_evt: any, data: any) => {
+      if (data.distance < DEADZONE) return;
+      sendInput('face', angleToDirection(data.angle.degree));
+    });
+    (right as any).on('end', () => sendInput('face', null));
 
     return () => { left.destroy(); right.destroy(); };
   }, [status]);
@@ -219,26 +229,41 @@ function Controller() {
     });
   }
 
+  // bucket a continuous angle into 4 cardinal directions
+  function angleToDirection(degree: number): 'up' | 'down' | 'left' | 'right' {
+    const normalized = ((degree % 360) + 360) % 360;
+    if (normalized >= 45 && normalized < 135) return 'up';
+    if (normalized >= 135 && normalized < 225) return 'left';
+    if (normalized >= 225 && normalized < 315) return 'down';
+    return 'right';
+  }
+
   if (status === "playing") {
     return (
-      <div className="min-h-screen w-screen bg-neutral-900 select-none relative" style={{ touchAction: 'none' }}>
+      <div className="w-screen h-dvh bg-neutral-900 select-none relative" style={{ touchAction: 'none' }}>
 
-        {/* rotate-phone overlay — only shown while the phone is in portrait */}
         <div className="hidden portrait:flex absolute inset-0 z-50 flex-col items-center justify-center gap-4 bg-neutral-900">
           <GamepadDirectional className="w-12 h-12 text-neutral-500 animate-spin" style={{ animationDuration: '2.5s' }} />
           <p className="font-thai text-white text-lg tracking-wide">กรุณาหมุนมือถือ</p>
         </div>
 
-        {/* controller layout — centered cluster, sticks + A/B */}
-        <div className="hidden landscape:flex h-screen w-screen items-center justify-center">
-          <div className="flex flex-col items-center gap-16">
+        <div className="hidden landscape:flex h-full w-full items-center justify-center">
+          <div className="flex flex-col items-center" style={{ gap: 'clamp(12px, 3vh, 28px)' }}>
 
-            <div className="flex items-center gap-40">
-              <div id="stick-left" className="w-40 h-40 relative rounded-full bg-neutral-800 border border-neutral-700" style={{ touchAction: 'none' }} />
-              <div id="stick-right" className="w-40 h-40 relative rounded-full bg-neutral-800 border border-neutral-700" style={{ touchAction: 'none' }} />
+            <div className="flex items-center" style={{ gap: 'clamp(16px, 6vw, 48px)' }}>
+              <div
+                id="stick-left"
+                className="relative rounded-full bg-neutral-800 border border-neutral-700"
+                style={{ touchAction: 'none', width: 'clamp(88px, 22vh, 150px)', height: 'clamp(88px, 22vh, 150px)' }}
+              />
+              <div
+                id="stick-right"
+                className="relative rounded-full bg-neutral-800 border border-neutral-700"
+                style={{ touchAction: 'none', width: 'clamp(88px, 22vh, 150px)', height: 'clamp(88px, 22vh, 150px)' }}
+              />
             </div>
 
-            <div className="flex items-center gap-8">
+            <div className="flex items-center" style={{ gap: 'clamp(12px, 3vw, 24px)' }}>
               <TouchButton label="B" onPress={() => sendInput('B', true)} onRelease={() => sendInput('B', false)} />
               <TouchButton label="A" onPress={() => sendInput('A', true)} onRelease={() => sendInput('A', false)} />
             </div>
@@ -367,23 +392,6 @@ function Controller() {
       <Toaster />
     </div>
   );
-}
-
-function TouchButton({ label, onPress, onRelease }: { label: string; onPress: () => void; onRelease: () => void }) {
-  return (
-    <button
-      className="w-16 h-16 rounded-full text-white font-bold text-lg select-none
-                 bg-neutral-800 border border-neutral-700
-                 active:bg-neutral-600
-                 transition-colors duration-75"
-      style={{ touchAction: 'none' }}
-      onTouchStart={(e) => { e.preventDefault(); onPress(); }}
-      onTouchEnd={(e) => { e.preventDefault(); onRelease(); }}
-      onTouchCancel={(e) => { e.preventDefault(); onRelease(); }}
-    >
-      {label}
-    </button>
-  )
 }
 
 export default Controller;
