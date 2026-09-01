@@ -28,7 +28,49 @@ function Controller() {
   const [status, setStatus] = useState<SessionStatus>("loading");
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // DEBUG: gate sends on the REAL join state, not just "a channel object exists".
+  // A channel object exists the instant supabase.channel() is called, but it
+  // isn't actually joined to the topic until .subscribe()'s callback reports
+  // 'SUBSCRIBED'. Sending before that can silently drop the broadcast.
+  const channelReadyRef = useRef(false);
+  const [channelStatus, setChannelStatus] = useState<string>("connecting");
+  const [debugLog, setDebugLog] = useState<Record<string, string>>({});
+  const [joystickData, setJoystickData] = useState<{ left?: any; right?: any }>({});
+  const [outgoing, setOutgoing] = useState<any[]>([]);
+
   const lastSentRef = useRef(0);
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // throttled broadcast of controller input to the game/display page
+  const sendInput = (type: string, payload: unknown) => {
+    const channel = channelRef.current;
+    if (!channel || !channelReadyRef.current) return;
+
+    const now = Date.now();
+
+    // Throttle continuous stick events to ~30 fps to avoid flooding
+    const isStick = type === 'move' || type === 'face';
+    if (isStick && payload !== null) {
+      if (now - lastSentRef.current < 33) return;
+      lastSentRef.current = now;
+    }
+
+    const message = { type: 'broadcast', event: 'input', payload: { type, payload, playerId: userRef.current.player?.id, ts: now } };
+    try {
+      console.debug('[realtime] sending', message);
+      channel.send(message as any);
+    } catch (e) {
+      console.error('[realtime] send exception', e);
+    }
+
+    // DEBUG: visible confirmation, on the phone itself, that a send actually fired
+    setDebugLog(prev => ({ ...prev, [type]: JSON.stringify(payload) }));
+    setOutgoing(prev => [message, ...prev].slice(0, 20));
+  };
 
   // Realtime: session status changes (claimed by someone else / ended) +
   // this channel is also reused by sendInput() to broadcast controller input
@@ -40,6 +82,7 @@ function Controller() {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${session.id}` },
         (payload: { new: Session }) => {
+          console.debug('[realtime] received session update', payload);
           setSession(payload.new);
           if (payload.new.status === 'ended') {
             navigate(`/result?id=${payload.new.id}`);
@@ -50,15 +93,21 @@ function Controller() {
           }
         }
       )
-      .subscribe();
+      .subscribe((subStatus) => {
+        console.debug('[realtime] controller channel status:', subStatus);
+        setChannelStatus(subStatus);
+        channelReadyRef.current = subStatus === 'SUBSCRIBED';
+      });
 
+    console.debug('[realtime] subscribed channel', channel);
     channelRef.current = channel;
 
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
+      channelReadyRef.current = false;
     };
-  }, [session?.id, user.player?.id]);
+  }, [session?.id, user.player?.id, navigate]);
 
   // Load the session row
   useEffect(() => {
@@ -93,7 +142,7 @@ function Controller() {
 
     loadSession();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, navigate]);
 
   // Load the player's profile once we have a session and an authed user
   useEffect(() => {
@@ -140,38 +189,9 @@ function Controller() {
     let right: any;
     let destroyed = false;
 
-    const leftZone = document.getElementById('stick-left')!;
-    const rightZone = document.getElementById('stick-right')!;
-
-    function createSticks() {
-      if (destroyed) return;
-      left = nipplejs.create({
-        zone: leftZone,
-        mode: 'static',
-        position: { left: '50%', top: '50%' },
-        size: 140,
-        color: '#a3a3a3',
-      });
-      right = nipplejs.create({
-        zone: rightZone,
-        mode: 'static',
-        position: { left: '50%', top: '50%' },
-        size: 140,
-        color: '#a3a3a3',
-      });
-
-      const DEADZONE = 10;
-      (left as any).on('move', (_evt: any, data: any) => {
-        if (data.distance < DEADZONE) return;
-        sendInput('move', angleToDirection(data.angle.degree));
-      });
-      (left as any).on('end', () => sendInput('move', null));
-      (right as any).on('move', (_evt: any, data: any) => {
-        if (data.distance < DEADZONE) return;
-        sendInput('face', angleToDirection(data.angle.degree));
-      });
-      (right as any).on('end', () => sendInput('face', null));
-    }
+    const leftZone = document.getElementById('stick-left');
+    const rightZone = document.getElementById('stick-right');
+    if (!leftZone || !rightZone) return;
 
     function destroySticks() {
       left?.destroy();
@@ -180,12 +200,100 @@ function Controller() {
       right = undefined;
     }
 
-    // Recreate whenever either zone's rendered size actually changes
-    // (covers: initial mount while hidden, orientation change, resize)
-    const ro = new ResizeObserver((entries) => {
-      const hasSize = entries.every(e => e.contentRect.width > 0 && e.contentRect.height > 0);
+    const touchActive = { left: false, right: false };
+
+    function createSticks() {
+      if (destroyed || !leftZone || !rightZone) return;
       destroySticks();
-      if (hasSize) createSticks();
+
+      const leftRect = leftZone.getBoundingClientRect();
+      const rightRect = rightZone.getBoundingClientRect();
+      if (leftRect.width === 0 || leftRect.height === 0 || rightRect.width === 0 || rightRect.height === 0) {
+        return;
+      }
+
+      left = nipplejs.create({
+        zone: leftZone,
+        mode: 'static',
+        position: { left: '50%', top: '50%' },
+        size: Math.min(leftRect.width, 140),
+        color: '#a3a3a3',
+      });
+      right = nipplejs.create({
+        zone: rightZone,
+        mode: 'static',
+        position: { left: '50%', top: '50%' },
+        size: Math.min(rightRect.width, 140),
+        color: '#a3a3a3',
+      });
+
+      const DEADZONE = 3;
+
+      left.on('start', () => { touchActive.left = true; setJoystickData(p => ({ ...p, left: { active: true } })); });
+      left.on('move', (evt: any) => {
+        const data = evt.data;
+        console.debug('[joystick] left move', data?.distance, data?.angle?.degree);
+        setJoystickData(p => ({ ...p, left: data ? { distance: data.distance, angle: data.angle?.degree, vector: data.vector } : undefined }));
+        if (!data || data.distance < DEADZONE) return;
+        sendInput('move', {
+          angle: data.angle?.degree,
+          radian: data.angle?.radian,
+          vector: data.vector,
+          distance: data.distance,
+          force: data.force,
+          raw: data.raw,
+          direction: data.direction,
+        });
+      });
+      left.on('end', () => {
+        touchActive.left = false;
+        setJoystickData(p => ({ ...p, left: undefined }));
+        sendInput('move', null);
+      });
+
+      // Right stick: aim direction + auto-fire while touching
+      right.on('start', () => { touchActive.right = true; setJoystickData(p => ({ ...p, right: { active: true } })); });
+      right.on('move', (evt: any) => {
+        const data = evt.data;
+        console.debug('[joystick] right move', data?.distance, data?.angle?.degree);
+        setJoystickData(p => ({ ...p, right: data ? { distance: data.distance, angle: data.angle?.degree, vector: data.vector } : undefined }));
+        if (!data || data.distance < DEADZONE) return;
+        sendInput('face', {
+          angle: data.angle?.degree,
+          radian: data.angle?.radian,
+          vector: data.vector,
+          distance: data.distance,
+          force: data.force,
+          raw: data.raw,
+          direction: data.direction,
+        });
+        sendInput('fire', true);
+      });
+      right.on('end', () => {
+        touchActive.right = false;
+        setJoystickData(p => ({ ...p, right: undefined }));
+        sendInput('face', null);
+        sendInput('fire', false);
+      });
+    }
+
+    createSticks();
+
+    const ro = new ResizeObserver((entries) => {
+      console.debug('[joystick] resize observed',
+        entries.map(e => ({ w: e.contentRect.width, h: e.contentRect.height })));
+
+      if (touchActive.left || touchActive.right) {
+        console.debug('[joystick] skipping recreate — touch in progress');
+        return;
+      }
+
+      const hasSize = entries.every(e => e.contentRect.width > 0 && e.contentRect.height > 0);
+      if (hasSize) {
+        createSticks();
+      } else {
+        destroySticks();
+      }
     });
     ro.observe(leftZone);
     ro.observe(rightZone);
@@ -239,34 +347,6 @@ function Controller() {
     setStatus("playing");
   }
 
-  // throttled broadcast of controller input to the game/display page
-  function sendInput(type: string, payload: unknown) {
-    const channel = channelRef.current;
-    if (!channel) return;
-
-    const isStick = type === 'moveLeft' || type === 'moveRight';
-    const now = Date.now();
-    if (isStick && payload !== null) {
-      if (now - lastSentRef.current < 33) return;
-      lastSentRef.current = now;
-    }
-
-    channel.send({
-      type: 'broadcast',
-      event: 'input',
-      payload: { type, payload, playerId: user.player?.id, ts: now },
-    });
-  }
-
-  // bucket a continuous angle into 4 cardinal directions
-  function angleToDirection(degree: number): 'up' | 'down' | 'left' | 'right' {
-    const normalized = ((degree % 360) + 360) % 360;
-    if (normalized >= 45 && normalized < 135) return 'up';
-    if (normalized >= 135 && normalized < 225) return 'left';
-    if (normalized >= 225 && normalized < 315) return 'down';
-    return 'right';
-  }
-
   if (status === "playing") {
     return (
       <div className="w-screen h-dvh bg-neutral-900 select-none relative" style={{ touchAction: 'none' }}>
@@ -288,6 +368,40 @@ function Controller() {
               className="relative rounded-full bg-neutral-800 border border-neutral-700"
               style={{ touchAction: 'none', width: 'clamp(88px, min(28vw, 45vh), 220px)', height: 'clamp(88px, min(28vw, 45vh), 220px)' }}
             />
+          </div>
+        </div>
+
+        {/* DEBUG: remove once confirmed working. Mirrors PhaserGame's debug panel
+            so you can compare both sides side by side. */}
+        <div className="absolute top-2 left-2 z-50 bg-black/80 text-green-400 text-[10px] font-mono p-2 rounded max-w-55 space-y-0.5">
+          <div>channel: {channelStatus}</div>
+          {Object.keys(debugLog).length === 0
+            ? <div>no input sent yet</div>
+            : Object.entries(debugLog).map(([type, p]) => (
+              <div key={type}>{type}: {p}</div>
+            ))
+          }
+        </div>
+
+        {/* Bottom floating debug window: joystick raw data + outgoing messages */}
+        <div className="fixed bottom-3 left-1/2 z-50 -translate-x-1/2 bg-black/80 text-white text-[12px] font-mono p-3 rounded-lg w-[95%] max-w-2xl">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <div className="text-xs text-neutral-300 mb-1">Joystick (raw)</div>
+              <pre className="whitespace-pre-wrap text-[11px] text-green-300 max-h-36 overflow-auto">{JSON.stringify(joystickData, null, 2)}</pre>
+            </div>
+            <div className="w-56">
+              <div className="text-xs text-neutral-300 mb-1">Outgoing (latest)</div>
+              <div className="text-[11px] max-h-36 overflow-auto space-y-1">
+                {outgoing.length === 0 ? (
+                  <div className="text-neutral-400">no messages</div>
+                ) : (
+                  outgoing.map((m, i) => (
+                    <div key={i} className="text-[11px] text-neutral-200 bg-black/30 p-1 rounded">{m.payload?.payload?.type || m.payload?.type || m.event || m.type} — {JSON.stringify(m.payload || m, null, 0)}</div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
