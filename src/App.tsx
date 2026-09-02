@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router";
-import Home from './pages/Home'
+import Home from '@/pages/Home'
 import PhaserGame from "@/pages/PhaserGame";
 import Controller from "@/pages/Controller";
 import EndScreen from "@/pages/EndScreen";
