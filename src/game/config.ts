@@ -23,67 +23,67 @@ export const GAME_CONFIG = {
 
   // Player settings
   PLAYER: {
-    SPEED: 200,
-    MAX_HEALTH: 100,
+    SPEED: 220,
+    MAX_HEALTH: 150,
     SIZE: 80,
     GUN_WIDTH: 34,
     GUN_HEIGHT: 17,
-    INVINCIBILITY_TIME: 500
+    INVINCIBILITY_TIME: 600
   },
 
   // Enemy types configuration (all are bugs with different colors)
   ENEMIES: {
     BUG: {
       name: 'Bug',
-      health: 20,
-      speed: 150,
-      damage: 10,
+      health: 15,
+      speed: 120,
+      damage: 6,
       size: 60,
-      score: 10,
+      score: 25,
       spawnWeight: 50,
       behavior: 'chase',
       color: 'green'
     },
     TROJAN: {
       name: 'Trojan',
-      health: 40,
-      speed: 100,
-      damage: 20,
+      health: 28,
+      speed: 85,
+      damage: 12,
       size: 40,
-      score: 25,
+      score: 50,
       spawnWeight: 30,
       behavior: 'chase',
       color: 'red'
     },
     WORM: {
       name: 'Worm',
-      health: 30,
-      speed: 80,
-      damage: 15,
+      health: 22,
+      speed: 70,
+      damage: 8,
       size: 40,
-      score: 20,
+      score: 40,
       spawnWeight: 25,
       behavior: 'chase',
       color: 'yellow'
     },
     PACKET_SNIFFER: {
       name: 'Packet Sniffer',
-      health: 25,
-      speed: 60,
-      damage: 15,
+      health: 20,
+      speed: 55,
+      damage: 8,
       size: 40,
-      score: 30,
+      score: 60,
       spawnWeight: 20,
       behavior: 'chase',
       color: 'green2'
     },
     ROOTKIT: {
       name: 'Rootkit',
-      health: 35,
-      speed: 120,
-      damage: 25,
+      health: 25,
+      speed: 95,
+      damage: 14,
       size: 40,
-      score: 40,
+      score: 80,
       spawnWeight: 15,
       behavior: 'chase',
       color: 'red2'
@@ -137,33 +137,33 @@ export const GAME_CONFIG = {
   WEAPONS: {
     RAPID_FIRE: {
       name: 'Rapid Fire',
-      damage: 12,
-      fireRate: 150,
-      range: 600,
+      damage: 18,
+      fireRate: 120,
+      range: 650,
       type: 'projectile',
       color: 0x00ff00,
-      speed: 700,
+      speed: 750,
       size: 3
     },
     SPREAD_SHOT: {
       name: 'Spread Shot',
-      damage: 10,
-      fireRate: 400,
-      range: 450,
+      damage: 15,
+      fireRate: 320,
+      range: 500,
       type: 'spread',
-      projectileCount: 5,
+      projectileCount: 7,
       color: 0xffaa00,
-      speed: 550,
+      speed: 600,
       size: 4
     },
     AOE_BLAST: {
       name: 'AOE Blast',
-      damage: 35,
-      fireRate: 800,
-      range: 300,
+      damage: 55,
+      fireRate: 650,
+      range: 350,
       type: 'aoe',
       color: 0xff3300,
-      radius: 120
+      radius: 150
     }
   },
 
@@ -173,21 +173,21 @@ export const GAME_CONFIG = {
 
   // Spawn settings
   SPAWN: {
-    INITIAL_INTERVAL: 800,
-    MIN_INTERVAL: 150,
-    INTERVAL_DECREASE_RATE: 25,
+    INITIAL_INTERVAL: 1400,
+    MIN_INTERVAL: 350,
+    INTERVAL_DECREASE_RATE: 15,
     ENEMY_REVEAL_DURATION_SECONDS: 300,
-    MAX_ACTIVE_ENEMIES: 50,
-    WEAPON_DROP_CHANCE: 0.12,
-    WEAPON_DROP_COOLDOWN_MS: 10000,
-    HEALTH_DROP_CHANCE: 0.08,
-    HEALTH_DROP_COOLDOWN_MS: 15000,
-    HP_MULTIPLIER_PER_MINUTE: 0.2
+    MAX_ACTIVE_ENEMIES: 35,
+    WEAPON_DROP_CHANCE: 0.20,
+    WEAPON_DROP_COOLDOWN_MS: 6000,
+    HEALTH_DROP_CHANCE: 0.18,
+    HEALTH_DROP_COOLDOWN_MS: 8000,
+    HP_MULTIPLIER_PER_MINUTE: 0.10
   },
 
   // Scoring
   SCORING: {
-    SURVIVAL_POINTS_PER_SECOND: 1,
-    KILL_MULTIPLIER: 10
+    SURVIVAL_POINTS_PER_SECOND: 5,
+    KILL_MULTIPLIER: 25
   }
 };
