@@ -162,7 +162,7 @@ function Home() {
         <div className="absolute inset-0 z-0">
           <GlyphMatrix cellSize={40} />
         </div>
-        <div className="absolute inset-0 z-0 bg-gradient-to-b from-neutral-950/70 via-transparent to-neutral-950/80" />
+        <div className="absolute inset-0 z-0 bg-linear-to-b from-neutral-950/70 via-transparent to-neutral-950/80" />
 
         <div className="relative z-10 flex flex-col items-center justify-center h-full w-full text-white gap-10">
           <div className="relative p-6">

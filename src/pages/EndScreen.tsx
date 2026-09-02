@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router"
-import toast from 'react-hot-toast'
 import { supabase } from "@/lib/supabase"
-import { Loader2, Download } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import ccklogo from "@/assets/cck-logo.png"
 import gameLogo from "@/assets/cascade_failure_logo.png"
 import iglogo from "@/assets/instagram.png"
@@ -130,48 +129,6 @@ function ResultCard({
   )
 }
 
-// Export-only variant — plain inline styles, no Tailwind color utilities,
-// so nothing depends on how html-to-image serializes computed CSS colors.
-function ExportResultCard({
-  score,
-  playerName,
-  createdAt,
-}: {
-  score: number
-  playerName: string
-  createdAt: string
-}) {
-  return (
-    <div
-      style={{
-        width: 1080,
-        height: 1920,
-        background: '#0a0a0a',
-        border: '1px solid #262626',
-        borderRadius: 48,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 40,
-        padding: 96,
-        boxSizing: 'border-box',
-        fontFamily: 'inherit', // keep whatever font-thai resolves to via className below
-      }}
-      className="font-thai"
-    >
-      <p style={{ color: '#a3a3a3', fontSize: 30, margin: 0 }}>ผลการเล่น</p>
-      <h1 style={{ color: '#ffffff', fontWeight: 700, fontSize: 220, lineHeight: 1, margin: 0 }}>
-        {pad(score)}
-      </h1>
-      <p style={{ color: '#ffffff', fontSize: 48, margin: 0, maxWidth: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {playerName}
-      </p>
-      <p style={{ color: '#737373', fontSize: 24, marginTop: 16 }}>{createdAt}</p>
-    </div>
-  )
-}
-
 function EndScreen() {
   const [params] = useSearchParams()
   const id = params.get('id')
@@ -179,14 +136,10 @@ function EndScreen() {
   const [loading, setLoading] = useState(true)
   const [exists, setExists] = useState<boolean | null>(null)
   const [playerName, setPlayerName] = useState<string>('')
-  const [score, setScore] = useState<number>(0)
   const [createdAt, setCreatedAt] = useState<string>('')
 
   const [displayScore, setDisplayScore] = useState(0)
   const [playConfetti, setPlayConfetti] = useState(false)
-  const [downloading, setDownloading] = useState(false)
-
-  const exportRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!id) {
@@ -222,7 +175,6 @@ function EndScreen() {
 
       setExists(true)
       setPlayerName(data.player_name)
-      setScore(Number(data.score) || 0)
       setCreatedAt(new Date(data.created_at).toLocaleString())
       setLoading(false)
       setPlayConfetti(true)
@@ -243,31 +195,6 @@ function EndScreen() {
     load()
     return () => { cancelled = true }
   }, [id])
-
-  async function handleDownload() {
-    if (!exportRef.current) return
-    setDownloading(true)
-    try {
-      await document.fonts.ready // ensure font-thai is actually loaded before rasterizing
-      const { toPng } = await import('html-to-image')
-      const dataUrl = await toPng(exportRef.current, {
-        width: 1080,
-        height: 1920,
-        pixelRatio: 1,
-        backgroundColor: '#0a0a0a',
-        cacheBust: true, // avoids stale/cross-origin cached assets breaking capture
-      })
-      const a = document.createElement('a')
-      a.href = dataUrl
-      a.download = 'result.png'
-      a.click()
-    } catch (err) {
-      console.error(err)
-      toast.error('ไม่สามารถสร้างภาพ กรุณาลองใหม่อีกครั้ง')
-    } finally {
-      setDownloading(false)
-    }
-  }
 
   const invalidNotice = (
     <div className="rounded-xl border border-neutral-700 py-12 px-6 flex flex-col items-center justify-center gap-6 w-full max-w-md">
@@ -317,15 +244,6 @@ function EndScreen() {
         )} */}
       </div>
 
-      {/* Offscreen node, fixed at 1080x1920, used only as the export source */}
-      {/* {exists && !loading && (
-        <div
-          ref={exportRef}
-          style={{ position: 'fixed', top: 0, left: '-9999px', width: 1080, height: 1920 }}
-        >
-          <ExportResultCard score={score} playerName={playerName} createdAt={createdAt} />
-        </div>
-      )} */}
     </div>
   )
 }
