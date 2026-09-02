@@ -1,3 +1,4 @@
+// ShootEffect.ts
 import Phaser from 'phaser'
 import { GAME_CONFIG } from '../config'
 
@@ -24,7 +25,7 @@ export class ShootEffect {
     sprite.setDepth(26)
     sprite.setOrigin(0.5, 0.5)
     sprite.setRotation(angle)
-    const displaySize = GAME_CONFIG.WEAPONS.EFFECT_DISPLAY_SIZE
+    const displaySize = GAME_CONFIG.WEAPON_EFFECTS.DISPLAY_SIZE
     sprite.setDisplaySize(displaySize * scale, displaySize * scale)
     sprite.play(animKey)
     sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {

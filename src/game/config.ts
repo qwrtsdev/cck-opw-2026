@@ -1,4 +1,5 @@
-// Game configuration constants
+// config.ts
+
 export const GAME_CONFIG = {
   // Scene keys
   SCENES: {
@@ -24,10 +25,10 @@ export const GAME_CONFIG = {
   PLAYER: {
     SPEED: 200,
     MAX_HEALTH: 100,
-    SIZE: 80, // Slightly larger player sprite
+    SIZE: 80,
     GUN_WIDTH: 34,
     GUN_HEIGHT: 17,
-    INVINCIBILITY_TIME: 500 // ms
+    INVINCIBILITY_TIME: 500
   },
 
   // Enemy types configuration (all are bugs with different colors)
@@ -132,8 +133,7 @@ export const GAME_CONFIG = {
     'gun_9': 'effect_9',
   } as const,
 
-  // Updated weapon configuration for gun types
-  // Updated weapon configuration for gun types
+  // Weapon configuration for gun types
   WEAPONS: {
     RAPID_FIRE: {
       name: 'Rapid Fire',
@@ -173,9 +173,9 @@ export const GAME_CONFIG = {
 
   // Spawn settings
   SPAWN: {
-    INITIAL_INTERVAL: 800, // Reduced for faster initial spawn
-    MIN_INTERVAL: 150, // Reduced for more frequent spawning
-    INTERVAL_DECREASE_RATE: 25, // Increased rate for faster decrease
+    INITIAL_INTERVAL: 800,
+    MIN_INTERVAL: 150,
+    INTERVAL_DECREASE_RATE: 25,
     ENEMY_REVEAL_DURATION_SECONDS: 300,
     MAX_ACTIVE_ENEMIES: 50,
     WEAPON_DROP_CHANCE: 0.12,
