@@ -208,7 +208,7 @@ function EndScreen() {
     <div className="min-h-dvh w-screen bg-neutral-900 select-none relative flex items-center justify-center py-10 px-4">
       <ConfettiCanvas play={!!playConfetti} />
 
-      <div className="z-30 w-full flex flex-col items-center gap-6 landscape:flex-row landscape:justify-center landscape:gap-10">
+      <div className="z-30 w-full flex flex-col items-center gap-6 landscape:justify-center landscape:gap-10">
         <span className="flex flex-row justify-center items-center mt-9">
           <img src={gameLogo} alt="Cascade Failure Logo" className="w-80 h-auto mr-2" />
         </span>
@@ -225,7 +225,7 @@ function EndScreen() {
           invalidNotice
         )}
 
-        <p className="text-white font-thai text-sm text-center">นำผลสรุปคะแนน มาอวดกันได้ที่<br /><img src={iglogo} className="w-4 h-4 inline" /><b>{" "}comclub_kmutnb</b></p>
+        <p className="text-white font-thai text-sm text-center">นำผลสรุปคะแนน แท็คมาอวดกันได้ที่<br /><img src={iglogo} className="w-4 h-4 inline" /><b>{" "}comclub_kmutnb</b></p>
 
         <span className="flex flex-row justify-center items-center mb-9">
           <img src={ccklogo} alt="Computer Club Logo" className="w-5 h-5 mr-2" />

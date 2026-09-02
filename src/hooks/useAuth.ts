@@ -15,50 +15,88 @@ export function useAuth() {
     useEffect(() => {
         let mounted = true
 
-        async function ensureSignedIn() {
-            const { data: { session } } = await supabase.auth.getSession()
-
-            if (!session) {
-                await supabase.auth.signInAnonymously()
-            } else {
-                const { data: profile } = await supabase
+        async function fetchOrCreateProfile(userId: string): Promise<string> {
+            try {
+                const { data, error } = await supabase
                     .from('profiles')
                     .select('display_name')
-                    .eq('id', session.user.id)
-                    .single()
+                    .eq('id', userId)
+                    .maybeSingle()
 
-                if (mounted) {
-                    setPlayer({
-                        id: session.user.id,
-                        name: profile?.display_name ?? 'Anonymous',
-                        score: 0,
-                    })
+                if (error) {
+                    console.warn('Error fetching profile in useAuth:', error)
                 }
-            }
 
-            if (mounted) setLoading(false)
+                if (data?.display_name) {
+                    return data.display_name
+                }
+
+                // If profile does not exist yet, create default profile row
+                const defaultName = 'Anonymous'
+                const { error: upsertError } = await supabase
+                    .from('profiles')
+                    .upsert({ id: userId, display_name: defaultName })
+
+                if (upsertError) {
+                    console.warn('Could not upsert default profile in useAuth:', upsertError)
+                }
+                return defaultName
+            } catch (err) {
+                console.warn('fetchOrCreateProfile error:', err)
+                return 'Anonymous'
+            }
         }
 
-        ensureSignedIn()
+        async function initAuth() {
+            try {
+                const { data: { session } } = await supabase.auth.getSession()
+
+                let currentSession = session
+                if (!currentSession) {
+                    const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously()
+                    if (signInError) {
+                        console.error('Error signing in anonymously:', signInError)
+                    } else {
+                        currentSession = signInData.session
+                    }
+                }
+
+                if (currentSession?.user) {
+                    const displayName = await fetchOrCreateProfile(currentSession.user.id)
+                    if (mounted) {
+                        setPlayer({
+                            id: currentSession.user.id,
+                            name: displayName,
+                            score: 0,
+                        })
+                    }
+                }
+            } catch (e) {
+                console.error('initAuth error:', e)
+            } finally {
+                if (mounted) setLoading(false)
+            }
+        }
+
+        initAuth()
 
         const { data: sub } = supabase.auth.onAuthStateChange(async (_e, session) => {
             if (!session?.user) {
-                if (mounted) setPlayer(null)
+                if (mounted) {
+                    setPlayer(null)
+                    setLoading(false)
+                }
                 return
             }
 
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('display_name')
-                .eq('id', session.user.id)
-                .single()
-
+            const displayName = await fetchOrCreateProfile(session.user.id)
             if (mounted) {
                 setPlayer({
                     id: session.user.id,
-                    name: profile?.display_name ?? 'Anonymous',
+                    name: displayName,
                     score: 0,
                 })
+                setLoading(false)
             }
         })
 

@@ -238,32 +238,56 @@ function Controller() {
     let cancelled = false;
 
     async function loadProfile() {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, display_name")
-        .eq("id", user.player?.id)
-        .single();
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .eq("id", user.player!.id)
+          .maybeSingle();
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (error || !data) {
-        toast.error('เกิดปัญหาขณะโหลดโปรไฟล์', { duration: 3000 });
-        setStatus("invalid");
-        return;
+        let currentProfile = data;
+
+        if (!currentProfile) {
+          const fallbackName = user.player?.name || "Anonymous";
+          const { data: inserted } = await supabase
+            .from("profiles")
+            .upsert({ id: user.player!.id, display_name: fallbackName })
+            .select("id, display_name")
+            .maybeSingle();
+
+          currentProfile = inserted || { id: user.player!.id, display_name: fallbackName };
+        }
+
+        if (cancelled) return;
+
+        setProfile(currentProfile);
+        setDisplayName(currentProfile.display_name || user.player?.name || "");
+        setStatus(
+          session?.status === 'playing'
+            ? (session.player_id === user.player?.id ? 'playing' : 'claimed')
+            : 'ready'
+        );
+      } catch (err) {
+        console.warn("loadProfile error:", err);
+        if (cancelled) return;
+
+        // Graceful fallback to avoid bricking the screen
+        const fallbackName = user.player?.name || "Anonymous";
+        setProfile({ id: user.player!.id, display_name: fallbackName });
+        setDisplayName(fallbackName);
+        setStatus(
+          session?.status === 'playing'
+            ? (session.player_id === user.player?.id ? 'playing' : 'claimed')
+            : 'ready'
+        );
       }
-
-      setProfile(data);
-      setDisplayName(data.display_name);
-      setStatus(
-        session?.status === 'playing'
-          ? (session.player_id === user.player?.id ? 'playing' : 'claimed')
-          : 'ready'
-      );
     }
 
     loadProfile();
     return () => { cancelled = true; };
-  }, [session, user.player?.id, user.loading]);
+  }, [session, user.player?.id, user.player?.name, user.loading]);
 
   // Twin joysticks — only mounted once we're actually in the playing view.
   useEffect(() => {
@@ -395,10 +419,10 @@ function Controller() {
     if (!user.player?.id || !displayName.trim() || nameLoading) return;
     setNameLoading(true);
 
+    const trimmed = displayName.trim();
     const { error } = await supabase
       .from("profiles")
-      .update({ display_name: displayName.trim() })
-      .eq("id", user.player.id);
+      .upsert({ id: user.player.id, display_name: trimmed });
 
     setNameLoading(false);
 
@@ -408,7 +432,8 @@ function Controller() {
     }
 
     toast.success('เปลี่ยนชื่อผู้เล่นสำเร็จ', { duration: 3000 });
-    if (profile) setProfile({ ...profile, display_name: displayName.trim() });
+    if (profile) setProfile({ ...profile, display_name: trimmed });
+    else setProfile({ id: user.player.id, display_name: trimmed });
   }
 
   async function handleStart() {
