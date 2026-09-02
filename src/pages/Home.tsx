@@ -1,8 +1,6 @@
-import { Marquee } from "@/components/ui/marquee"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import QRCode from "react-qr-code"
-import toast, { Toaster } from 'react-hot-toast';
 
 import { supabase } from "@/lib/supabase"
 import { sessionManager } from "@/lib/sessionManager"
@@ -159,7 +157,7 @@ function Home() {
                 />)}
             </div>
             <p className="text-2xl"><Smartphone className="inline mr-3" />แสกนเพื่อเล่นเกม</p>
-            
+
             {/* Direct game access button for testing */}
             <button
               onClick={() => navigate('/game')}
