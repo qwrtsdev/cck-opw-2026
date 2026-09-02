@@ -5,8 +5,6 @@ import { useNavigate, useSearchParams } from 'react-router'
 import Phaser from 'phaser'
 
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
-
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
 import { EventBus } from '@/game/eventBus'
 import { BootScene } from '@/game/scenes/BootScene'
@@ -24,7 +22,6 @@ export default function PhaserGame() {
   const [params] = useSearchParams();
   const id = params.get("id");
   const navigate = useNavigate()
-  const auth = useAuth()
 
   const gameWidth = 1280
   const gameHeight = 960
@@ -32,10 +29,7 @@ export default function PhaserGame() {
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
   const scorePersistedRef = useRef(false)
-  // const [inputsByType, setInputsByType] = useState<Record<string, any>>({})
-  // DEBUG: mirrors the status line added to controller.tsx — compare both
-  // panels side by side to confirm both ends actually joined the same topic.
-  // const [channelStatus, setChannelStatus] = useState<string>('connecting')
+  const claimedPlayerNameRef = useRef<string>('Anonymous')
 
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return
@@ -86,15 +80,14 @@ export default function PhaserGame() {
         }
       )
       .on('broadcast', { event: 'input' }, ({ payload }) => {
+        if (payload?.playerName && typeof payload.playerName === 'string' && payload.playerName.trim()) {
+          claimedPlayerNameRef.current = payload.playerName.trim()
+        }
         // Forward into the shared EventBus that GameScene is subscribed to.
         EventBus.emit('controller-input', payload)
-
-        // Keep debug panel updated
-        // setInputsByType(prev => ({ ...prev, [payload.type]: payload }))
       })
       .subscribe((status) => {
         console.log('[channel status]', status)
-        // setChannelStatus(status)
       })
 
     return () => { supabase.removeChannel(channel) }
@@ -142,7 +135,7 @@ export default function PhaserGame() {
       }
 
       const claimedPlayerId = sessionRow?.player_id ?? null
-      let playerName = auth.player?.name ?? 'Unknown Player'
+      let playerName = claimedPlayerNameRef.current || 'Anonymous'
 
       if (claimedPlayerId) {
         const { data: profileRow, error: profileError } = await supabase
@@ -159,9 +152,13 @@ export default function PhaserGame() {
           })
         }
 
-        if (profileRow?.display_name) {
-          playerName = profileRow.display_name
+        if (profileRow?.display_name && profileRow.display_name.trim()) {
+          playerName = profileRow.display_name.trim()
         }
+      }
+
+      if ((playerName === 'Anonymous' || !playerName) && claimedPlayerNameRef.current && claimedPlayerNameRef.current !== 'Anonymous') {
+        playerName = claimedPlayerNameRef.current
       }
 
       const { error: insertScoreError } = await supabase
@@ -203,7 +200,7 @@ export default function PhaserGame() {
     return () => {
       EventBus.off('game-over-triggered', handleGameOverTriggered)
     }
-  }, [auth.player?.id, auth.player?.name, id])
+  }, [id])
 
   return (
     <div className='relative w-screen h-screen flex justify-center items-center bg-neutral-900'>

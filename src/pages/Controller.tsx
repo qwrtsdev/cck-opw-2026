@@ -135,10 +135,18 @@ function Controller() {
       lastSentRef.current = now;
     }
 
+    const currentName = displayName.trim() || profile?.display_name || userRef.current.player?.name || 'Anonymous';
+
     const message = {
       type: 'broadcast',
       event: 'input',
-      payload: { type, payload, playerId: userRef.current.player?.id, ts: now },
+      payload: {
+        type,
+        payload,
+        playerId: userRef.current.player?.id,
+        playerName: currentName,
+        ts: now
+      },
     };
 
     try {
@@ -440,6 +448,15 @@ function Controller() {
     if (!user.player?.id || !id || status === "starting" || status === "playing") return;
     setStatus("starting");
 
+    const trimmed = displayName.trim() || user.player?.name || 'Anonymous';
+    try {
+      await supabase
+        .from("profiles")
+        .upsert({ id: user.player.id, display_name: trimmed });
+    } catch (e) {
+      console.warn("Could not upsert profile before start:", e);
+    }
+
     const { data, error } = await supabase
       .from("sessions")
       .update({ player_id: user.player.id, status: "playing" })
@@ -515,6 +532,12 @@ function Controller() {
           className="bg-neutral-800 text-white px-3 py-2 rounded-lg outline-none"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleUpdateName();
+            }
+          }}
           placeholder="ชื่อภายในเกม"
         />
         <button
