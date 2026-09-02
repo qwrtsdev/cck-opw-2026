@@ -1,8 +1,13 @@
+// PhaserGame.tsx
+
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import Phaser from 'phaser'
 
+import { supabase } from '@/lib/supabase'
+
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
+import { EventBus } from '@/game/eventBus'
 import { BootScene } from '@/game/scenes/BootScene'
 import { GameScene } from '@/game/scenes/GameScene'
 import { UIScene } from '@/game/scenes/UIScene'
@@ -14,9 +19,10 @@ export default function PhaserGame() {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
-  const debugTextRef = useRef<Phaser.GameObjects.Text | null>(null)
-  const [lastInput, setLastInput] = useState<any>(null)
   const [inputsByType, setInputsByType] = useState<Record<string, any>>({})
+  // DEBUG: mirrors the status line added to controller.tsx — compare both
+  // panels side by side to confirm both ends actually joined the same topic.
+  const [channelStatus, setChannelStatus] = useState<string>('connecting')
 
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return
@@ -41,7 +47,7 @@ export default function PhaserGame() {
           autoCenter: Phaser.Scale.CENTER_BOTH
         }
       })
-      
+
       console.log('Phaser game initialized successfully')
     } catch (error) {
       console.error('Error initializing Phaser game:', error)
@@ -67,19 +73,15 @@ export default function PhaserGame() {
         }
       )
       .on('broadcast', { event: 'input' }, ({ payload }) => {
-        console.log('[input]', payload)
-        setInputsByType(prev => ({ ...prev, [payload.type]: payload }))
+        // Forward into the shared EventBus that GameScene is subscribed to.
+        EventBus.emit('controller-input', payload)
 
-        if (debugTextRef.current) {
-          debugTextRef.current.setText(
-            Object.entries({ ...inputsByType, [payload.type]: payload })
-              .map(([type, p]: [string, any]) => `${type}: ${JSON.stringify(p.payload)}`)
-              .join('\n')
-          )
-        }
+        // Keep debug panel updated
+        setInputsByType(prev => ({ ...prev, [payload.type]: payload }))
       })
       .subscribe((status) => {
-        console.log('[channel status]', status) // watch for 'SUBSCRIBED' vs 'CHANNEL_ERROR'/'TIMED_OUT'
+        console.log('[channel status]', status)
+        setChannelStatus(status)
       })
 
     return () => { supabase.removeChannel(channel) }
@@ -95,6 +97,7 @@ export default function PhaserGame() {
 
       {/* plain HTML debug panel, outside the canvas — easier to read than squinting at Phaser text */}
       <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-green-400 text-xs font-mono p-3 rounded max-w-sm space-y-1">
+        <div>channel: {channelStatus}</div>
         {Object.keys(inputsByType).length === 0
           ? 'no input received yet'
           : Object.entries(inputsByType).map(([type, p]: [string, any]) => (

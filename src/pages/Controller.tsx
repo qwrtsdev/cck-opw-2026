@@ -1,3 +1,5 @@
+// Controller.tsx
+
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import toast, { Toaster } from 'react-hot-toast';
@@ -12,7 +14,84 @@ import gameLogo from "@/assets/cascade_failure_logo.png"
 import ccklogo from "@/assets/cck-logo.png"
 import { Loader2, Check, CircleAlert, Globe, GamepadDirectional, RefreshCcw } from "lucide-react";
 
-type SessionStatus = "loading" | "invalid" | "ready" | "starting" | "claimed" | "playing"
+type SessionStatus = "loading" | "invalid" | "ready" | "starting" | "claimed" | "playing";
+
+// Flip to true while testing on the booth floor. Keeps the on-screen
+// channel/joystick debug panels — and the render churn behind them — out
+// of the default build.
+const SHOW_DEBUG_OVERLAY = false;
+
+const STICK_DEADZONE = 3;     // px from center before we treat it as real input
+const STICK_SEND_HZ_MS = 33;  // ~30fps throttle for move/face broadcasts
+
+type StickPayload = {
+  angle?: number;
+  radian?: number;
+  vector?: { x: number; y: number };
+  distance: number;
+  force?: number;
+  raw?: unknown;
+  direction?: unknown;
+};
+
+function toStickPayload(data: any): StickPayload {
+  return {
+    angle: data.angle?.degree,
+    radian: data.angle?.radian,
+    vector: data.vector,
+    distance: data.distance,
+    force: data.force,
+    raw: data.raw,
+    direction: data.direction,
+  };
+}
+
+function DebugOverlay({
+  channelStatus,
+  debugLog,
+  joystickData,
+  outgoing,
+}: {
+  channelStatus: string;
+  debugLog: Record<string, string>;
+  joystickData: { left?: any; right?: any };
+  outgoing: any[];
+}) {
+  return (
+    <>
+      <div className="absolute top-2 left-2 z-50 bg-black/80 text-green-400 text-[10px] font-mono p-2 rounded max-w-55 space-y-0.5">
+        <div>channel: {channelStatus}</div>
+        {Object.keys(debugLog).length === 0
+          ? <div>no input sent yet</div>
+          : Object.entries(debugLog).map(([type, p]) => (
+            <div key={type}>{type}: {p}</div>
+          ))
+        }
+      </div>
+
+      <div className="fixed bottom-3 left-1/2 z-50 -translate-x-1/2 bg-black/80 text-white text-[12px] font-mono p-3 rounded-lg w-[95%] max-w-2xl">
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <div className="text-xs text-neutral-300 mb-1">Joystick (raw)</div>
+            <pre className="whitespace-pre-wrap text-[11px] text-green-300 max-h-36 overflow-auto">{JSON.stringify(joystickData, null, 2)}</pre>
+          </div>
+          <div className="w-56">
+            <div className="text-xs text-neutral-300 mb-1">Outgoing (latest)</div>
+            <div className="text-[11px] max-h-36 overflow-auto space-y-1">
+              {outgoing.length === 0 ? (
+                <div className="text-neutral-400">no messages</div>
+              ) : (
+                outgoing.map((m, i) => (
+                  <div key={i} className="text-[11px] text-neutral-200 bg-black/30 p-1 rounded">{m.payload?.payload?.type || m.payload?.type || m.event || m.type} — {JSON.stringify(m.payload || m, null, 0)}</div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function Controller() {
   const [params] = useSearchParams();
@@ -24,14 +103,13 @@ function Controller() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [nameLoading, setNameLoading] = useState(false);
-
   const [status, setStatus] = useState<SessionStatus>("loading");
 
   const channelRef = useRef<RealtimeChannel | null>(null);
-  // DEBUG: gate sends on the REAL join state, not just "a channel object exists".
-  // A channel object exists the instant supabase.channel() is called, but it
+  // A channel object exists the instant supabase.channel() is called, but
   // isn't actually joined to the topic until .subscribe()'s callback reports
-  // 'SUBSCRIBED'. Sending before that can silently drop the broadcast.
+  // 'SUBSCRIBED'. Sending before that can silently drop the broadcast, so we
+  // gate sends on this instead of "does a channel object exist".
   const channelReadyRef = useRef(false);
   const [channelStatus, setChannelStatus] = useState<string>("connecting");
   const [debugLog, setDebugLog] = useState<Record<string, string>>({});
@@ -45,35 +123,38 @@ function Controller() {
     userRef.current = user;
   }, [user]);
 
-  // throttled broadcast of controller input to the game/display page
+  // Throttled broadcast of controller input to the game/display page.
   const sendInput = (type: string, payload: unknown) => {
     const channel = channelRef.current;
     if (!channel || !channelReadyRef.current) return;
 
     const now = Date.now();
-
-    // Throttle continuous stick events to ~30 fps to avoid flooding
-    const isStick = type === 'move' || type === 'face';
-    if (isStick && payload !== null) {
-      if (now - lastSentRef.current < 33) return;
+    const isContinuousStick = (type === 'move' || type === 'face') && payload !== null;
+    if (isContinuousStick) {
+      if (now - lastSentRef.current < STICK_SEND_HZ_MS) return;
       lastSentRef.current = now;
     }
 
-    const message = { type: 'broadcast', event: 'input', payload: { type, payload, playerId: userRef.current.player?.id, ts: now } };
+    const message = {
+      type: 'broadcast',
+      event: 'input',
+      payload: { type, payload, playerId: userRef.current.player?.id, ts: now },
+    };
+
     try {
-      console.debug('[realtime] sending', message);
       channel.send(message as any);
     } catch (e) {
       console.error('[realtime] send exception', e);
     }
 
-    // DEBUG: visible confirmation, on the phone itself, that a send actually fired
-    setDebugLog(prev => ({ ...prev, [type]: JSON.stringify(payload) }));
-    setOutgoing(prev => [message, ...prev].slice(0, 20));
+    if (SHOW_DEBUG_OVERLAY) {
+      setDebugLog(prev => ({ ...prev, [type]: JSON.stringify(payload) }));
+      setOutgoing(prev => [message, ...prev].slice(0, 20));
+    }
   };
 
   // Realtime: session status changes (claimed by someone else / ended) +
-  // this channel is also reused by sendInput() to broadcast controller input
+  // this channel is also reused by sendInput() to broadcast controller input.
   useEffect(() => {
     if (!session?.id) return;
 
@@ -82,7 +163,6 @@ function Controller() {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${session.id}` },
         (payload: { new: Session }) => {
-          console.debug('[realtime] received session update', payload);
           setSession(payload.new);
           if (payload.new.status === 'ended') {
             navigate(`/result?id=${payload.new.id}`);
@@ -94,12 +174,10 @@ function Controller() {
         }
       )
       .subscribe((subStatus) => {
-        console.debug('[realtime] controller channel status:', subStatus);
         setChannelStatus(subStatus);
         channelReadyRef.current = subStatus === 'SUBSCRIBED';
       });
 
-    console.debug('[realtime] subscribed channel', channel);
     channelRef.current = channel;
 
     return () => {
@@ -109,7 +187,7 @@ function Controller() {
     };
   }, [session?.id, user.player?.id, navigate]);
 
-  // Load the session row
+  // Load the session row.
   useEffect(() => {
     if (!id) {
       setStatus("invalid");
@@ -144,11 +222,11 @@ function Controller() {
     return () => { cancelled = true; };
   }, [id, navigate]);
 
-  // Load the player's profile once we have a session and an authed user
+  // Load the player's profile once we have a session and an authed user.
   useEffect(() => {
     if (!session) return;
-    if (user.loading) return;          // auth hasn't settled yet — wait
-    if (!user.player?.id) return;      // auth done but no player (shouldn't happen)
+    if (user.loading) return;
+    if (!user.player?.id) return;
 
     let cancelled = false;
 
@@ -169,29 +247,36 @@ function Controller() {
 
       setProfile(data);
       setDisplayName(data.display_name);
-
-      if (session?.status === 'playing') {
-        setStatus(session?.player_id === user?.player?.id ? 'playing' : 'claimed');
-      } else {
-        setStatus('ready');
-      }
+      setStatus(
+        session?.status === 'playing'
+          ? (session.player_id === user.player?.id ? 'playing' : 'claimed')
+          : 'ready'
+      );
     }
 
     loadProfile();
     return () => { cancelled = true; };
   }, [session, user.player?.id, user.loading]);
 
-  // Twin joysticks — only mounted once we're actually in the playing view
+  // Twin joysticks — only mounted once we're actually in the playing view.
   useEffect(() => {
     if (status !== "playing") return;
+
+    const leftZone = document.getElementById('stick-left');
+    const rightZone = document.getElementById('stick-right');
+    if (!leftZone || !rightZone) return;
 
     let left: any;
     let right: any;
     let destroyed = false;
 
-    const leftZone = document.getElementById('stick-left');
-    const rightZone = document.getElementById('stick-right');
-    if (!leftZone || !rightZone) return;
+    // Tracks whether a finger is actively on either stick right now. On
+    // mobile, touching the screen often hides the browser chrome (address
+    // bar), which resizes the viewport, which — because the zones are sized
+    // with vh via clamp() — fires the ResizeObserver below. Without this
+    // guard that would destroy+recreate the stick mid-drag and drop the
+    // touch (you'd see 'end' fire but never any 'move').
+    const touchActive = { left: false, right: false };
 
     function destroySticks() {
       left?.destroy();
@@ -200,7 +285,45 @@ function Controller() {
       right = undefined;
     }
 
-    const touchActive = { left: false, right: false };
+    // Wires one nipplejs manager: sends `sendType` on move (once past the
+    // deadzone), and resets to `restPayload` on release. `onMove`/`onEnd`
+    // are optional extra side-effects (the right stick uses these to also
+    // start/stop firing).
+    function attachStick(
+      manager: any,
+      side: 'left' | 'right',
+      sendType: string,
+      restPayload: unknown,
+      onMove?: (payload: StickPayload) => void,
+      onEnd?: () => void,
+    ) {
+      manager.on('start', () => {
+        touchActive[side] = true;
+        if (SHOW_DEBUG_OVERLAY) setJoystickData(p => ({ ...p, [side]: { active: true } }));
+      });
+
+      manager.on('move', (evt: any) => {
+        const data = evt.data;
+        if (SHOW_DEBUG_OVERLAY) {
+          setJoystickData(p => ({
+            ...p,
+            [side]: data ? { distance: data.distance, angle: data.angle?.degree, vector: data.vector } : undefined,
+          }));
+        }
+        if (!data || data.distance < STICK_DEADZONE) return;
+
+        const payload = toStickPayload(data);
+        sendInput(sendType, payload);
+        onMove?.(payload);
+      });
+
+      manager.on('end', () => {
+        touchActive[side] = false;
+        if (SHOW_DEBUG_OVERLAY) setJoystickData(p => ({ ...p, [side]: undefined }));
+        sendInput(sendType, restPayload);
+        onEnd?.();
+      });
+    }
 
     function createSticks() {
       if (destroyed || !leftZone || !rightZone) return;
@@ -227,66 +350,22 @@ function Controller() {
         color: '#a3a3a3',
       });
 
-      const DEADZONE = 3;
+      // Left stick: movement.
+      attachStick(left, 'left', 'move', null);
 
-      left.on('start', () => { touchActive.left = true; setJoystickData(p => ({ ...p, left: { active: true } })); });
-      left.on('move', (evt: any) => {
-        const data = evt.data;
-        console.debug('[joystick] left move', data?.distance, data?.angle?.degree);
-        setJoystickData(p => ({ ...p, left: data ? { distance: data.distance, angle: data.angle?.degree, vector: data.vector } : undefined }));
-        if (!data || data.distance < DEADZONE) return;
-        sendInput('move', {
-          angle: data.angle?.degree,
-          radian: data.angle?.radian,
-          vector: data.vector,
-          distance: data.distance,
-          force: data.force,
-          raw: data.raw,
-          direction: data.direction,
-        });
-      });
-      left.on('end', () => {
-        touchActive.left = false;
-        setJoystickData(p => ({ ...p, left: undefined }));
-        sendInput('move', null);
-      });
-
-      // Right stick: aim direction + auto-fire while touching
-      right.on('start', () => { touchActive.right = true; setJoystickData(p => ({ ...p, right: { active: true } })); });
-      right.on('move', (evt: any) => {
-        const data = evt.data;
-        console.debug('[joystick] right move', data?.distance, data?.angle?.degree);
-        setJoystickData(p => ({ ...p, right: data ? { distance: data.distance, angle: data.angle?.degree, vector: data.vector } : undefined }));
-        if (!data || data.distance < DEADZONE) return;
-        sendInput('face', {
-          angle: data.angle?.degree,
-          radian: data.angle?.radian,
-          vector: data.vector,
-          distance: data.distance,
-          force: data.force,
-          raw: data.raw,
-          direction: data.direction,
-        });
-        sendInput('fire', true);
-      });
-      right.on('end', () => {
-        touchActive.right = false;
-        setJoystickData(p => ({ ...p, right: undefined }));
-        sendInput('face', null);
-        sendInput('fire', false);
-      });
+      // Right stick: aim direction, and auto-fire while held.
+      attachStick(right, 'right', 'face', null,
+        () => sendInput('fire', true),
+        () => sendInput('fire', false));
     }
 
     createSticks();
 
+    // Recreate whenever either zone's rendered size actually changes
+    // (covers: initial mount while hidden, orientation change, resize) —
+    // but never while a finger is actively on a stick.
     const ro = new ResizeObserver((entries) => {
-      console.debug('[joystick] resize observed',
-        entries.map(e => ({ w: e.contentRect.width, h: e.contentRect.height })));
-
-      if (touchActive.left || touchActive.right) {
-        console.debug('[joystick] skipping recreate — touch in progress');
-        return;
-      }
+      if (touchActive.left || touchActive.right) return;
 
       const hasSize = entries.every(e => e.contentRect.width > 0 && e.contentRect.height > 0);
       if (hasSize) {
@@ -371,39 +450,14 @@ function Controller() {
           </div>
         </div>
 
-        {/* DEBUG: remove once confirmed working. Mirrors PhaserGame's debug panel
-            so you can compare both sides side by side. */}
-        <div className="absolute top-2 left-2 z-50 bg-black/80 text-green-400 text-[10px] font-mono p-2 rounded max-w-55 space-y-0.5">
-          <div>channel: {channelStatus}</div>
-          {Object.keys(debugLog).length === 0
-            ? <div>no input sent yet</div>
-            : Object.entries(debugLog).map(([type, p]) => (
-              <div key={type}>{type}: {p}</div>
-            ))
-          }
-        </div>
-
-        {/* Bottom floating debug window: joystick raw data + outgoing messages */}
-        <div className="fixed bottom-3 left-1/2 z-50 -translate-x-1/2 bg-black/80 text-white text-[12px] font-mono p-3 rounded-lg w-[95%] max-w-2xl">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <div className="text-xs text-neutral-300 mb-1">Joystick (raw)</div>
-              <pre className="whitespace-pre-wrap text-[11px] text-green-300 max-h-36 overflow-auto">{JSON.stringify(joystickData, null, 2)}</pre>
-            </div>
-            <div className="w-56">
-              <div className="text-xs text-neutral-300 mb-1">Outgoing (latest)</div>
-              <div className="text-[11px] max-h-36 overflow-auto space-y-1">
-                {outgoing.length === 0 ? (
-                  <div className="text-neutral-400">no messages</div>
-                ) : (
-                  outgoing.map((m, i) => (
-                    <div key={i} className="text-[11px] text-neutral-200 bg-black/30 p-1 rounded">{m.payload?.payload?.type || m.payload?.type || m.event || m.type} — {JSON.stringify(m.payload || m, null, 0)}</div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {SHOW_DEBUG_OVERLAY && (
+          <DebugOverlay
+            channelStatus={channelStatus}
+            debugLog={debugLog}
+            joystickData={joystickData}
+            outgoing={outgoing}
+          />
+        )}
       </div>
     )
   }
@@ -464,7 +518,6 @@ function Controller() {
     <div className="min-h-screen w-screen bg-neutral-900 select-none relative flex flex-col gap-9 justify-center items-center">
       <span className="flex flex-row justify-center items-center mt-9">
         <img src={gameLogo} alt="Cascade Failure Logo" className="w-80 h-auto mr-2" />
-
       </span>
 
       {status === "loading" ? (

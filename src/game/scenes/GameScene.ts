@@ -1,8 +1,54 @@
+// GameScene.ts
 import Phaser from 'phaser'
 import { GAME_CONFIG } from '../config'
 import { Player } from '../entities/Player'
 import { SpawnManager } from '../systems/SpawnManager'
 import { WeaponManager } from '../systems/WeaponManager'
+import { EventBus } from '@/game/eventBus'
+
+type StickVector = { x: number; y: number }
+type StickPayload = { vector?: StickVector; distance: number } | null
+type ControllerInput = {
+  type: 'move' | 'face' | 'fire'
+  payload: StickPayload | boolean
+  playerId: string
+  ts: number
+}
+type MoveVector = { x: number; y: number; magnitude: number } | null
+type AimVector = { x: number; y: number } | null
+
+function readStickVector(payload: StickPayload): { x: number; y: number } | null {
+  if (!payload?.vector) return null
+
+  const x = Number(payload.vector.x)
+  const y = Number(payload.vector.y)
+
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+  return { x, y }
+}
+
+// Analog movement: pass the real nipplejs vector through instead of
+// quantizing to 4 directions. nipplejs's y is bottom-up (positive = pushed
+// up); Phaser world y is top-down, hence the flip so "push up" moves the
+// sprite up on screen.
+function moveVectorFromPayload(payload: StickPayload): MoveVector {
+  const vector = readStickVector(payload)
+  if (!vector) return null
+
+  const magnitude = Math.min(1, Math.hypot(vector.x, vector.y))
+  if (magnitude < 0.05) return null
+
+  return { x: vector.x, y: -vector.y, magnitude }
+}
+
+// Analog aim: same treatment as movement, same y-flip.
+function aimVectorFromPayload(payload: StickPayload): AimVector {
+  const vector = readStickVector(payload)
+  if (!vector) return null
+
+  if (Math.abs(vector.x) < 0.001 && Math.abs(vector.y) < 0.001) return null
+  return { x: vector.x, y: -vector.y }
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Player
@@ -18,6 +64,11 @@ export class GameScene extends Phaser.Scene {
   private kills: number = 0
   private startTime: number = 0
   private gameOver: boolean = false
+
+  // Mobile controller state (set by EventBus, fed from Supabase broadcast)
+  private mobileMove: MoveVector = null
+  private mobileAim: AimVector = null
+  private mobileFiring: boolean = false
 
   constructor() {
     super({ key: GAME_CONFIG.SCENES.GAME })
@@ -40,7 +91,6 @@ export class GameScene extends Phaser.Scene {
     this.WASD = this.input.keyboard!.addKeys('W,A,S,D')
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
 
-
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
       this.mouseX = worldPoint.x
@@ -52,8 +102,6 @@ export class GameScene extends Phaser.Scene {
 
     // Launch UI scene for health bar and score display
     this.scene.launch(GAME_CONFIG.SCENES.UI)
-
-
 
     this.events.on('enemyKilled', (enemy: any, score: number) => {
       this.score += score
@@ -72,6 +120,12 @@ export class GameScene extends Phaser.Scene {
     })
 
     this.setupMobileControls()
+
+    // Phaser does NOT call a class method named `shutdown()` for you — it
+    // only fires the scene-systems 'shutdown' event. Wiring it explicitly
+    // here is what actually makes cleanup run on scene stop/restart.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this)
+
     this.startTime = Date.now()
     this.weaponManager.setEnemies(this.spawnManager.getEnemies())
     this.spawnManager.spawnEnemy()
@@ -81,64 +135,66 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createBackground() {
-    // Use the provided background image
     const background = this.add.image(
       GAME_CONFIG.WORLD.WIDTH / 2,
       GAME_CONFIG.WORLD.HEIGHT / 2,
       'background'
     )
-    
-    // Scale the background to fit the world
+
     const scaleX = GAME_CONFIG.WORLD.WIDTH / background.width
     const scaleY = GAME_CONFIG.WORLD.HEIGHT / background.height
     const scale = Math.max(scaleX, scaleY)
-    
+
     background.setScale(scale)
     background.setOrigin(0.5, 0.5)
-    
+    background.setDepth(-10)
+
     console.log('Background created with scale:', scale)
   }
 
   private setupMobileControls() {
-    // Listen for mobile control events from Supabase real-time
-    // This will be implemented when Supabase integration is added
-    this.events.on('mobileInput', (input: { direction: string, action: string }) => {
-      if (this.gameOver) return
-      
-      switch (input.direction) {
-        case 'up':
-          this.player.setVelocityY(-GAME_CONFIG.PLAYER.SPEED)
-          break
-        case 'down':
-          this.player.setVelocityY(GAME_CONFIG.PLAYER.SPEED)
-          break
-        case 'left':
-          this.player.setVelocityX(-GAME_CONFIG.PLAYER.SPEED)
-          this.player.setFlipX(true)
-          break
-        case 'right':
-          this.player.setVelocityX(GAME_CONFIG.PLAYER.SPEED)
-          this.player.setFlipX(false)
-          break
-        case 'stop':
-          this.player.setVelocity(0, 0)
-          break
-      }
-      
-      if (input.action === 'fire') {
-        this.weaponManager.fire()
-      }
-    })
+    // Listen on the shared EventBus (module-level, decoupled from
+    // game.events) instead of this.game.events — see PhaserGame.tsx.
+    EventBus.on('controller-input', this.handleControllerInput, this)
+  }
+
+  private handleControllerInput = (input: ControllerInput) => {
+    if (this.gameOver) return
+
+    switch (input.type) {
+      case 'move':
+        this.mobileMove = moveVectorFromPayload(input.payload as StickPayload)
+        break
+
+      case 'face':
+        this.mobileAim = aimVectorFromPayload(input.payload as StickPayload)
+        break
+
+      case 'fire':
+        this.mobileFiring = input.payload === true
+        break
+    }
   }
 
   update(_time: number, delta: number) {
     if (this.gameOver) return
 
-    this.player.update(this.cursors, this.WASD, this.mouseX, this.mouseY)
+    // Resolve effective aim target: mobile aim overrides mouse when active
+    let aimX = this.mouseX
+    let aimY = this.mouseY
+
+    if (this.mobileAim) {
+      const AIM_DIST = 1000
+      aimX = this.player.x + this.mobileAim.x * AIM_DIST
+      aimY = this.player.y + this.mobileAim.y * AIM_DIST
+    }
+
+    this.player.update(this.cursors, this.WASD, aimX, aimY, this.mobileMove)
     this.spawnManager.update(delta)
     this.weaponManager.update()
 
-    if (this.spaceKey.isDown || this.input.activePointer.isDown) {
+    // Fire: keyboard/mouse OR mobile right stick held
+    if (this.spaceKey.isDown || this.input.activePointer.isDown || this.mobileFiring) {
       this.weaponManager.fire()
     }
 
@@ -148,58 +204,46 @@ export class GameScene extends Phaser.Scene {
       }
     })
 
-    // Update weapon pickups
     this.spawnManager.getWeaponPickups().forEach(weapon => {
       if (weapon.active) {
         weapon.update()
       }
     })
 
-    // Update health pickups
     this.spawnManager.getHealthPickups().forEach(health => {
       if (health.active) {
         health.update()
       }
     })
 
-    // Check collision between player and weapon pickups
     this.spawnManager.getWeaponPickups().forEach(weapon => {
       if (weapon.active) {
         const distance = Phaser.Math.Distance.Between(
           this.player.x, this.player.y,
           weapon.x, weapon.y
         )
-        
+
         if (distance < 30) {
-          // Player picked up weapon
           const gunTexture = weapon.getGunTexture()
           this.player.switchGunVisual(gunTexture)
-          
-          // Show pickup message
           this.events.emit('weaponPickedUp', gunTexture)
-          
           weapon.destroy()
           this.spawnManager.removeWeaponPickup(weapon)
         }
       }
     })
 
-    // Check collision between player and health pickups
     this.spawnManager.getHealthPickups().forEach(health => {
       if (health.active) {
         const distance = Phaser.Math.Distance.Between(
           this.player.x, this.player.y,
           health.x, health.y
         )
-        
+
         if (distance < 30) {
-          // Player picked up health
           const healAmount = health.getHealAmount()
           this.player.heal(healAmount)
-          
-          // Show pickup message
           this.events.emit('healthPickedUp', healAmount)
-          
           health.destroy()
           this.spawnManager.removeHealthPickup(health)
         }
@@ -217,25 +261,21 @@ export class GameScene extends Phaser.Scene {
 
   private handleGameOver() {
     this.gameOver = true
-    
-    // Stop spawning
+
     this.spawnManager.clearEnemies()
-    
-    // Calculate final score
+
     const survivalTime = (Date.now() - this.startTime) / 1000
     const finalScore = Math.floor(
       survivalTime * GAME_CONFIG.SCORING.SURVIVAL_POINTS_PER_SECOND +
       this.kills * GAME_CONFIG.SCORING.KILL_MULTIPLIER
     )
-    
-    // Emit game over event
+
     this.events.emit('gameOver', {
       score: finalScore,
       kills: this.kills,
       survivalTime: survivalTime
     })
-    
-    // Switch to game over scene
+
     this.time.delayedCall(2000, () => {
       this.scene.stop(GAME_CONFIG.SCENES.UI)
       this.scene.start(GAME_CONFIG.SCENES.GAME_OVER, {
@@ -244,6 +284,10 @@ export class GameScene extends Phaser.Scene {
         survivalTime: survivalTime
       })
     })
+  }
+
+  private shutdown() {
+    EventBus.off('controller-input', this.handleControllerInput, this)
   }
 
   getPlayer() {

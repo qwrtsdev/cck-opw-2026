@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import mapFinal from '@/assets/game/MAP_FINAL.png'
 import { GAME_CONFIG } from '../config'
 
 export class BootScene extends Phaser.Scene {
@@ -13,7 +14,7 @@ export class BootScene extends Phaser.Scene {
 
     const progressBar = this.add.graphics()
     const progressBox = this.add.graphics()
-    
+
     progressBox.fillStyle(0x222222, 0.8)
     progressBox.fillRect(width / 4, height / 2 - 30, width / 2, 50)
 
@@ -52,7 +53,7 @@ export class BootScene extends Phaser.Scene {
       loadingText.destroy()
       percentText.destroy()
     })
-    
+
     // Error handling
     this.load.on('loaderror', (file: any) => {
       console.error('Error loading asset:', file.key)
@@ -62,10 +63,10 @@ export class BootScene extends Phaser.Scene {
     // Load actual game assets
     // Player sprite
     this.load.image('player', 'game/player.png')
-    
+
     // Player hand/arm
     this.load.image('hand', 'game/hand.png')
-    
+
     // Weapon sprites
     this.load.image('gun_1', 'game/2 Guns/1_1.png')
     this.load.image('gun_2', 'game/2 Guns/2_1.png')
@@ -77,7 +78,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image('gun_8', 'game/2 Guns/8_1.png')
     this.load.image('gun_9', 'game/2 Guns/9_1.png')
     this.load.image('gun_10', 'game/2 Guns/10_1.png')
-    
+
     // Gun fire-frame sprites (frame 2 = shooting animation)
     this.load.image('gun_1_fire', 'game/2 Guns/1_2.png')
     this.load.image('gun_2_fire', 'game/2 Guns/2_2.png')
@@ -89,7 +90,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image('gun_8_fire', 'game/2 Guns/8_2.png')
     this.load.image('gun_9_fire', 'game/2 Guns/9_2.png')
     this.load.image('gun_10_fire', 'game/2 Guns/10_2.png')
-    
+
     // Shoot-effect strips: 288x48 = 6 frames of 48x48, left to right
     for (const n of [6, 7, 8, 9, 10]) {
       this.load.spritesheet(`effect_${n}_1`, `game/4 Shoot_effects/${n}_1.png`, {
@@ -109,12 +110,12 @@ export class BootScene extends Phaser.Scene {
     for (const i of [1, 2, 3, 4, 5, 6, 7, 9, 10]) {
       this.load.image(`bullet_${i}_2`, `game/5 Bullets/${i}_2.png`)
     }
-    
+
     // Enemy sprites (all use the same bug texture)
     this.load.image('enemy_bug', 'game/enemy_bug.png')
-    
-    // Background image
-    this.load.image('background', 'game/background.png')
+
+    // Background image: use the final map image provided in src/assets/game
+    this.load.image('background', mapFinal)
   }
 
   create() {

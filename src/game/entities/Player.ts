@@ -1,5 +1,9 @@
+// Player.ts
+
 import Phaser from 'phaser'
 import { GAME_CONFIG } from '../config'
+
+type MobileMoveVector = { x: number; y: number; magnitude: number } | null
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   private health: number
@@ -82,12 +86,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.createHealthBar()
   }
 
-  update(cursors: Phaser.Types.Input.Keyboard.CursorKeys, WASD: any, mouseX: number = this.x, mouseY: number = this.y) {
+  update(
+    cursors: Phaser.Types.Input.Keyboard.CursorKeys,
+    WASD: any,
+    mouseX: number = this.x,
+    mouseY: number = this.y,
+    mobileMove: MobileMoveVector = null,
+  ) {
     let vx = 0, vy = 0
-    if (cursors.left.isDown  || WASD.A.isDown) vx = -GAME_CONFIG.PLAYER.SPEED
-    else if (cursors.right.isDown || WASD.D.isDown) vx =  GAME_CONFIG.PLAYER.SPEED
-    if (cursors.up.isDown    || WASD.W.isDown) vy = -GAME_CONFIG.PLAYER.SPEED
-    else if (cursors.down.isDown  || WASD.S.isDown) vy =  GAME_CONFIG.PLAYER.SPEED
+
+    if (mobileMove) {
+      // Mobile left stick overrides keyboard movement. x/y here are the
+      // normalized (-1..1) nipplejs vector, already screen-space-flipped
+      // by GameScene — this just scales it by speed and stick pressure.
+      const SPEED = GAME_CONFIG.PLAYER.SPEED
+      vx = mobileMove.x * SPEED * mobileMove.magnitude
+      vy = mobileMove.y * SPEED * mobileMove.magnitude
+    } else {
+      if (cursors.left.isDown || WASD.A.isDown) vx = -GAME_CONFIG.PLAYER.SPEED
+      else if (cursors.right.isDown || WASD.D.isDown) vx = GAME_CONFIG.PLAYER.SPEED
+      if (cursors.up.isDown || WASD.W.isDown) vy = -GAME_CONFIG.PLAYER.SPEED
+      else if (cursors.down.isDown || WASD.S.isDown) vy = GAME_CONFIG.PLAYER.SPEED
+    }
     this.setVelocity(vx, vy)
 
     // คำนวณมุมเล็งเมาส์
@@ -109,14 +129,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // ซ้าย: ขยับปืนไปทางซ้ายมากขึ้น และมือติดกับปืน
       this.gun.setFlipY(true)
       this.gun.x = 12
-      
+
       this.cropHalf(this.hand, 'hand', 'right', 16)
       this.hand.setFlipX(true)
       this.hand.x = 14
     } else {
       this.gun.setFlipY(false)
       this.gun.x = -12
-      
+
       this.cropHalf(this.hand, 'hand', 'left', 16)
       this.hand.setFlipX(false)
       this.hand.x = -6
@@ -127,8 +147,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.weaponContainer.rotation += angleDiff * 0.2
 
     // sync position ทั้งคู่ให้ตรงกับ physics body
-    this.bodyContainer.x   = this.x
-    this.bodyContainer.y   = this.y
+    this.bodyContainer.x = this.x
+    this.bodyContainer.y = this.y
     this.weaponContainer.x = this.x
     this.weaponContainer.y = this.y
   }
@@ -138,11 +158,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.isInvincible = true
     this.bodyContainer?.setAlpha(0.5)
     this.weaponContainer?.setAlpha(0.5)
-    
+
     // Gradual damage over time
     const damagePerTick = amount / 10 // Divide damage into 10 ticks
     let ticksRemaining = 10
-    
+
     const damageInterval = this.scene.time.addEvent({
       delay: 50, // 50ms per tick
       callback: () => {
@@ -150,7 +170,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.updateHealthBar()
         this.scene.events.emit('playerHealthChanged', this.health, this.maxHealth)
         ticksRemaining--
-        
+
         if (ticksRemaining <= 0 || this.health <= 0) {
           damageInterval.remove()
           this.isInvincible = false
@@ -228,12 +248,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
   switchWeapon(weaponName: string) { if (this.weapons.includes(weaponName)) this.currentWeapon = weaponName }
   addWeapon(weaponName: string) { if (!this.weapons.includes(weaponName)) this.weapons.push(weaponName) }
-  getHealth()    { return this.health }
+  getHealth() { return this.health }
   getMaxHealth() { return this.maxHealth }
 
   getGunPosition(): Phaser.Math.Vector2 {
     const muzzleOffset = 20
-    
+
     const p = this.weaponContainer.getWorldTransformMatrix().transformPoint(
       this.gun.x + muzzleOffset,
       this.gun.y
@@ -253,7 +273,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Switch to fire frame
     const fireTexture = this.currentGunTexture + '_fire'
     this.gun.setTexture(fireTexture)
-    
+
     // Return to idle frame after duration
     this.scene.time.delayedCall(duration, () => {
       if (this.gun && this.gun.active) {
@@ -265,13 +285,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   switchGunVisual(gunTexture: string) {
     this.currentGunTexture = gunTexture
     this.gun.setTexture(gunTexture)
-    
+
     // Update current weapon based on gun texture
     const weaponType = (GAME_CONFIG.GUN_MAPPING as any)[gunTexture]
     if (weaponType) {
       this.currentWeapon = weaponType
     }
-    
+
     // Flash effect when switching
     this.scene.tweens.add({
       targets: this.gun,
