@@ -133,12 +133,12 @@ export const GAME_CONFIG = {
   } as const,
 
   // Updated weapon configuration for gun types
+  // Updated weapon configuration for gun types
   WEAPONS: {
-    EFFECT_DISPLAY_SIZE: 54,
     RAPID_FIRE: {
       name: 'Rapid Fire',
       damage: 12,
-      fireRate: 150, // Fast firing
+      fireRate: 150,
       range: 600,
       type: 'projectile',
       color: 0x00ff00,
@@ -159,12 +159,16 @@ export const GAME_CONFIG = {
     AOE_BLAST: {
       name: 'AOE Blast',
       damage: 35,
-      fireRate: 800, // Slower firing
+      fireRate: 800,
       range: 300,
       type: 'aoe',
       color: 0xff3300,
       radius: 120
     }
+  },
+
+  WEAPON_EFFECTS: {
+    DISPLAY_SIZE: 54
   },
 
   // Spawn settings

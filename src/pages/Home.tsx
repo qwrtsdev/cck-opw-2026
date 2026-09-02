@@ -8,11 +8,9 @@ import { supabase } from "@/lib/supabase"
 
 import type { Session, PlayerItem } from "@/types/game"
 
-import { Marquee } from "@/components/ui/marquee"
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
-import { Play, Smartphone, LoaderCircle } from 'lucide-react'
+import { Smartphone, LoaderCircle } from 'lucide-react'
 
-import ccklogo from "@/assets/cck-logo.png"
 import gameLogo from "@/assets/cascade_failure_logo.png"
 import place_1 from "@/assets/place-1.png"
 import place_2 from "@/assets/place-2.png"
