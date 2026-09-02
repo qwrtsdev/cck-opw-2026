@@ -22,6 +22,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private currentAngle: number = 0
   private currentGunTexture: string = ''
+  private lastFacingLeft: boolean = false
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player')
@@ -72,7 +73,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // ปืน: x=-12 จุดหมุนเข้ามาในลำตัวมากขึ้น, origin=(0,0.5) โคนปืนที่ x=-12
     this.currentGunTexture = 'gun_1'
     this.gun = scene.add.sprite(-12, 0, this.currentGunTexture)
-    this.gun.setDisplaySize(20, 10)
+    this.gun.setDisplaySize(GAME_CONFIG.PLAYER.GUN_WIDTH, GAME_CONFIG.PLAYER.GUN_HEIGHT)
     this.gun.setOrigin(0, 0.5)
     this.weaponContainer.add(this.gun)
 
@@ -125,21 +126,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     // มือ + ปืน: mirror position เมื่อหันซ้าย เพื่อให้ไปอยู่ด้านซ้ายของตัว
-    if (facingLeft) {
-      // ซ้าย: ขยับปืนไปทางซ้ายมากขึ้น และมือติดกับปืน
-      this.gun.setFlipY(true)
-      this.gun.x = 12
+    if (facingLeft !== this.lastFacingLeft) {
+      if (facingLeft) {
+        // ซ้าย: ขยับปืนไปทางซ้ายมากขึ้น และมือติดกับปืน
+        this.gun.setFlipY(true)
+        this.gun.x = 12
 
-      this.cropHalf(this.hand, 'hand', 'right', 16)
-      this.hand.setFlipX(true)
-      this.hand.x = 14
-    } else {
-      this.gun.setFlipY(false)
-      this.gun.x = -12
+        this.cropHalf(this.hand, 'hand', 'right', 16)
+        this.hand.setFlipX(true)
+        this.hand.x = 14
+      } else {
+        this.gun.setFlipY(false)
+        this.gun.x = -12
 
-      this.cropHalf(this.hand, 'hand', 'left', 16)
-      this.hand.setFlipX(false)
-      this.hand.x = -6
+        this.cropHalf(this.hand, 'hand', 'left', 16)
+        this.hand.setFlipX(false)
+        this.hand.x = -6
+      }
+
+      this.lastFacingLeft = facingLeft
     }
 
     // หมุน weaponContainer รอบจุดกลาง (0,0) ซึ่งคือตำแหน่งตัวละคร

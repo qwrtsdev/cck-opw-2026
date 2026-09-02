@@ -187,6 +187,13 @@ function Controller() {
     };
   }, [session?.id, user.player?.id, navigate]);
 
+  // Safety net: whenever the session row transitions to ended from any path,
+  // always redirect this controller to the result page for that session.
+  useEffect(() => {
+    if (session?.status !== 'ended') return;
+    navigate(`/result?id=${session.id}`);
+  }, [session?.status, session?.id, navigate]);
+
   // Load the session row.
   useEffect(() => {
     if (!id) {
@@ -475,6 +482,7 @@ function Controller() {
     </div>
   );
 
+  // use as reference 2
   const validNotice = (
     <div className="rounded-xl border border-neutral-700 py-16 flex flex-col items-center justify-center gap-3">
       <div className="flex flex-row gap-2 items-center">

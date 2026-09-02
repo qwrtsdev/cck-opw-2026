@@ -79,6 +79,7 @@ export class GameScene extends Phaser.Scene {
 
     this.physics.world.setBounds(0, 0, GAME_CONFIG.WORLD.WIDTH, GAME_CONFIG.WORLD.HEIGHT)
     this.cameras.main.setBounds(0, 0, GAME_CONFIG.WORLD.WIDTH, GAME_CONFIG.WORLD.HEIGHT)
+    this.cameras.main.setZoom(GAME_CONFIG.CAMERA.ZOOM)
 
     this.createBackground()
 
@@ -276,13 +277,11 @@ export class GameScene extends Phaser.Scene {
       survivalTime: survivalTime
     })
 
-    this.time.delayedCall(2000, () => {
-      this.scene.stop(GAME_CONFIG.SCENES.UI)
-      this.scene.start(GAME_CONFIG.SCENES.GAME_OVER, {
-        score: finalScore,
-        kills: this.kills,
-        survivalTime: survivalTime
-      })
+    this.scene.stop(GAME_CONFIG.SCENES.UI)
+    this.scene.start(GAME_CONFIG.SCENES.GAME_OVER, {
+      score: finalScore,
+      kills: this.kills,
+      survivalTime: survivalTime
     })
   }
 

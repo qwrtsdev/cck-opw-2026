@@ -6,6 +6,8 @@ import { HealthPickup } from '../entities/HealthPickup'
 
 type EnemyType = keyof typeof GAME_CONFIG.ENEMIES
 
+const ALL_ENEMY_TYPES: EnemyType[] = ['BUG', 'TROJAN', 'WORM', 'PACKET_SNIFFER', 'ROOTKIT']
+
 export class SpawnManager {
   private scene: Phaser.Scene
   private player: Phaser.Physics.Arcade.Sprite
@@ -17,15 +19,19 @@ export class SpawnManager {
   private currentSpawnInterval: number
   private enemyHpMultiplier: number = 1
   private availableEnemyTypes: EnemyType[] = ['BUG']
+  private readonly difficultyIncreaseInterval: number
   private lastDifficultyIncrease: number = 0
   private spawnCount: number = 1
+  private lastWeaponDropTime: number = 0
+  private lastHealthDropTime: number = 0
 
   constructor(scene: Phaser.Scene, player: Phaser.Physics.Arcade.Sprite) {
     this.scene = scene
     this.player = player
     this.enemies = []
     this.currentSpawnInterval = GAME_CONFIG.SPAWN.INITIAL_INTERVAL
-    
+    this.difficultyIncreaseInterval = GAME_CONFIG.SPAWN.ENEMY_REVEAL_DURATION_SECONDS / (ALL_ENEMY_TYPES.length - 1)
+
     // Start spawn timer
     this.spawnTimer = scene.time.addEvent({
       delay: this.currentSpawnInterval,
@@ -37,13 +43,13 @@ export class SpawnManager {
 
   update(delta: number) {
     this.elapsedTime += delta / 1000 // Convert to seconds
-    
+
     // Update spawn interval based on elapsed time
     this.currentSpawnInterval = Math.max(
       GAME_CONFIG.SPAWN.MIN_INTERVAL,
       GAME_CONFIG.SPAWN.INITIAL_INTERVAL - (this.elapsedTime * GAME_CONFIG.SPAWN.INTERVAL_DECREASE_RATE)
     )
-    
+
     // Update timer delay only if it changed significantly
     if (Math.abs(this.spawnTimer.delay - this.currentSpawnInterval) > 50) {
       this.spawnTimer.reset({
@@ -53,9 +59,9 @@ export class SpawnManager {
         loop: true
       })
     }
-    
+
     // Increase difficulty based on time
-    if (this.elapsedTime - this.lastDifficultyIncrease >= GAME_CONFIG.SPAWN.DIFFICULTY_INCREASE_INTERVAL) {
+    if (this.elapsedTime - this.lastDifficultyIncrease >= this.difficultyIncreaseInterval) {
       this.increaseDifficulty()
       this.lastDifficultyIncrease = this.elapsedTime
     }
@@ -65,22 +71,25 @@ export class SpawnManager {
     // Increase enemy HP multiplier
     this.enemyHpMultiplier += GAME_CONFIG.SPAWN.HP_MULTIPLIER_PER_MINUTE
     this.spawnCount += 2 // Increase spawn count by 2 instead of 1
-    
+
     // Add new enemy types
-    const allEnemyTypes: EnemyType[] = ['BUG', 'TROJAN', 'WORM', 'PACKET_SNIFFER', 'ROOTKIT']
-    const currentTypeIndex = allEnemyTypes.indexOf(this.availableEnemyTypes[this.availableEnemyTypes.length - 1])
-    
-    if (currentTypeIndex < allEnemyTypes.length - 1) {
-      this.availableEnemyTypes.push(allEnemyTypes[currentTypeIndex + 1])
+    const currentTypeIndex = ALL_ENEMY_TYPES.indexOf(this.availableEnemyTypes[this.availableEnemyTypes.length - 1])
+
+    if (currentTypeIndex < ALL_ENEMY_TYPES.length - 1) {
+      this.availableEnemyTypes.push(ALL_ENEMY_TYPES[currentTypeIndex + 1])
     }
-    
+
     this.scene.events.emit('difficultyIncreased', this.enemyHpMultiplier)
   }
 
   public spawnEnemy() {
     if (!this.player.active) return
 
-    for (let i = 0; i < this.spawnCount; i++) {
+    const activeEnemyCount = this.enemies.filter(enemy => enemy.active).length
+    const remainingSlots = GAME_CONFIG.SPAWN.MAX_ACTIVE_ENEMIES - activeEnemyCount
+    if (remainingSlots <= 0) return
+
+    for (let i = 0; i < Math.min(this.spawnCount, remainingSlots); i++) {
       const camera = this.scene.cameras.main
       const spawnRect = new Phaser.Geom.Rectangle(
         camera.worldView.x - 120,
@@ -125,15 +134,24 @@ export class SpawnManager {
   }
 
   public dropLoot(x: number, y: number) {
-    // 30% chance to drop weapon, 20% chance to drop health
-    const weaponChance = 0.3
-    const healthChance = 0.2
+    // Lower weapon drop frequency, with a cooldown so drops don't cluster.
+    const weaponChance = GAME_CONFIG.SPAWN.WEAPON_DROP_CHANCE
+    const healthChance = GAME_CONFIG.SPAWN.HEALTH_DROP_CHANCE
     const random = Math.random()
+    const now = Date.now()
 
-    if (random < weaponChance) {
+    if (
+      random < weaponChance &&
+      now - this.lastWeaponDropTime >= GAME_CONFIG.SPAWN.WEAPON_DROP_COOLDOWN_MS
+    ) {
       this.spawnWeaponAt(x, y)
-    } else if (random < weaponChance + healthChance) {
+      this.lastWeaponDropTime = now
+    } else if (
+      random < weaponChance + healthChance &&
+      now - this.lastHealthDropTime >= GAME_CONFIG.SPAWN.HEALTH_DROP_COOLDOWN_MS
+    ) {
       this.spawnHealthAt(x, y)
+      this.lastHealthDropTime = now
     }
   }
 
@@ -162,16 +180,16 @@ export class SpawnManager {
       (sum, type) => sum + GAME_CONFIG.ENEMIES[type].spawnWeight,
       0
     )
-    
+
     let random = Math.random() * totalWeight
-    
+
     for (const type of this.availableEnemyTypes) {
       random -= GAME_CONFIG.ENEMIES[type].spawnWeight
       if (random <= 0) {
         return type
       }
     }
-    
+
     return this.availableEnemyTypes[0]
   }
 

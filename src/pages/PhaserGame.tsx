@@ -1,10 +1,11 @@
 // PhaserGame.tsx
 
-import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useEffect, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
 import Phaser from 'phaser'
 
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 
 import { GlyphMatrix } from "@/components/ui/glyph-matrix"
 import { EventBus } from '@/game/eventBus'
@@ -13,16 +14,28 @@ import { GameScene } from '@/game/scenes/GameScene'
 import { UIScene } from '@/game/scenes/UIScene'
 import { GameOverScene } from '@/game/scenes/GameOverScene'
 
+type GameOverPayload = {
+  score: number
+  kills: number
+  survivalTime: number
+}
+
 export default function PhaserGame() {
   const [params] = useSearchParams();
   const id = params.get("id");
+  const navigate = useNavigate()
+  const auth = useAuth()
+
+  const gameWidth = 1280
+  const gameHeight = 960
 
   const containerRef = useRef<HTMLDivElement>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
-  const [inputsByType, setInputsByType] = useState<Record<string, any>>({})
+  const scorePersistedRef = useRef(false)
+  // const [inputsByType, setInputsByType] = useState<Record<string, any>>({})
   // DEBUG: mirrors the status line added to controller.tsx — compare both
   // panels side by side to confirm both ends actually joined the same topic.
-  const [channelStatus, setChannelStatus] = useState<string>('connecting')
+  // const [channelStatus, setChannelStatus] = useState<string>('connecting')
 
   useEffect(() => {
     if (gameRef.current || !containerRef.current) return
@@ -30,8 +43,8 @@ export default function PhaserGame() {
     try {
       gameRef.current = new Phaser.Game({
         type: Phaser.AUTO,
-        width: 1400,
-        height: 900,
+        width: gameWidth,
+        height: gameHeight,
         parent: containerRef.current,
         backgroundColor: '#1a1a2e',
         scene: [BootScene, GameScene, UIScene, GameOverScene],
@@ -77,15 +90,120 @@ export default function PhaserGame() {
         EventBus.emit('controller-input', payload)
 
         // Keep debug panel updated
-        setInputsByType(prev => ({ ...prev, [payload.type]: payload }))
+        // setInputsByType(prev => ({ ...prev, [payload.type]: payload }))
       })
       .subscribe((status) => {
         console.log('[channel status]', status)
-        setChannelStatus(status)
+        // setChannelStatus(status)
       })
 
     return () => { supabase.removeChannel(channel) }
   }, [id])
+
+  useEffect(() => {
+    const handleReturnHome = () => {
+      navigate('/')
+    }
+
+    EventBus.on('game-over-return-home', handleReturnHome)
+
+    return () => {
+      EventBus.off('game-over-return-home', handleReturnHome)
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    const handleGameOverTriggered = async (payload: GameOverPayload) => {
+      if (!id) return
+      if (scorePersistedRef.current) return
+      scorePersistedRef.current = true
+
+      // Ensure this page has a Supabase auth session before touching RLS tables.
+      const { data: currentSession } = await supabase.auth.getSession()
+      if (!currentSession.session) {
+        const { error: signInError } = await supabase.auth.signInAnonymously()
+        if (signInError) {
+          console.error('[auth] anonymous sign-in failed', signInError)
+        }
+      }
+
+      const { data: sessionRow, error: sessionError } = await supabase
+        .from('sessions')
+        .select('player_id')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (sessionError) {
+        console.error('[session lookup] failed', {
+          code: sessionError.code,
+          message: sessionError.message,
+          details: sessionError.details,
+        })
+      }
+
+      const claimedPlayerId = sessionRow?.player_id ?? null
+      let playerName = auth.player?.name ?? 'Unknown Player'
+
+      if (claimedPlayerId) {
+        const { data: profileRow, error: profileError } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', claimedPlayerId)
+          .maybeSingle()
+
+        if (profileError) {
+          console.error('[profile lookup] failed', {
+            code: profileError.code,
+            message: profileError.message,
+            details: profileError.details,
+          })
+        }
+
+        if (profileRow?.display_name) {
+          playerName = profileRow.display_name
+        }
+      }
+
+      const { error: insertScoreError } = await supabase
+        .from('scores')
+        .insert({
+          session_id: id,
+          // This write runs on the game display client, which may not be the
+          // same auth user that claimed the session. Keep FK nullable.
+          player_id: null,
+          player_name: playerName,
+          score: Math.max(0, Math.floor(Number(payload?.score ?? 0)))
+        })
+
+      if (insertScoreError) {
+        console.error('[score insert] failed', {
+          code: insertScoreError.code,
+          message: insertScoreError.message,
+          details: insertScoreError.details,
+          hint: insertScoreError.hint,
+        })
+      }
+
+      const { error } = await supabase
+        .from('sessions')
+        .update({ status: 'ended' })
+        .eq('id', id)
+
+      if (error) {
+        console.error('[session end update] failed', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        })
+      }
+    }
+
+    EventBus.on('game-over-triggered', handleGameOverTriggered)
+
+    return () => {
+      EventBus.off('game-over-triggered', handleGameOverTriggered)
+    }
+  }, [auth.player?.id, auth.player?.name, id])
 
   return (
     <div className='relative w-screen h-screen flex justify-center items-center bg-neutral-900'>
@@ -93,10 +211,13 @@ export default function PhaserGame() {
         <GlyphMatrix cellSize={20} />
       </div>
 
-      <div ref={containerRef} className='border-white border-4 relative' />
+      <div
+        ref={containerRef}
+        className='relative w-7xl h-240 max-w-[92vw] max-h-[85vh]'
+      />
 
       {/* plain HTML debug panel, outside the canvas — easier to read than squinting at Phaser text */}
-      <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-green-400 text-xs font-mono p-3 rounded max-w-sm space-y-1">
+      {/* <div className="absolute bottom-4 left-4 z-10 bg-black/80 text-green-400 text-xs font-mono p-3 rounded max-w-sm space-y-1">
         <div>channel: {channelStatus}</div>
         {Object.keys(inputsByType).length === 0
           ? 'no input received yet'
@@ -104,7 +225,7 @@ export default function PhaserGame() {
             <div key={type}>{type}: {JSON.stringify(p.payload)}</div>
           ))
         }
-      </div>
+      </div> */}
     </div>
   )
 }

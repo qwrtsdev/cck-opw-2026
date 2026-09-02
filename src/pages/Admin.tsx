@@ -1,3 +1,5 @@
+// Admin.tsx
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { sessionManager } from "@/lib/sessionManager";
@@ -19,11 +21,8 @@ function formatDateTime(iso?: string) {
     );
 }
 
-type ViewMode = "active" | "ended";
-
 function Admin() {
     const [authed, setAuthed] = useState(() => sessionStorage.getItem("admin-authed") === "true");
-    const [view, setView] = useState<ViewMode>("active");
     const [sessions, setSessions] = useState<Session[]>([]);
     const [endedSessions, setEndedSessions] = useState<Session[]>([]);
     const [passwordInput, setPasswordInput] = useState("");
@@ -71,9 +70,9 @@ function Admin() {
         return () => { cancelled = true; };
     }, [authed]);
 
-    // load ended sessions
+    // load ended sessions — no longer gated behind a view toggle, fetch on mount like active
     useEffect(() => {
-        if (!authed || view !== "ended") return;
+        if (!authed) return;
 
         let cancelled = false;
 
@@ -100,7 +99,7 @@ function Admin() {
 
         loadEndedSessions();
         return () => { cancelled = true; };
-    }, [authed, view]);
+    }, [authed]);
 
     // realtime listener
     useEffect(() => {
@@ -128,28 +127,49 @@ function Admin() {
                         created_at: string;
                     };
 
+                    const { data: resolved, error: resolvedError } = await supabase
+                        .from("sessions")
+                        .select("id, status, player_id, created_at, profiles(display_name)")
+                        .eq("id", row.id)
+                        .maybeSingle();
+
+                    if (resolvedError) {
+                        console.error("admin realtime resolve session failed", resolvedError);
+                    }
+
+                    const resolvedProfile = Array.isArray((resolved as any)?.profiles)
+                        ? (resolved as any).profiles[0] ?? null
+                        : (resolved as any)?.profiles ?? null;
+
+                    const updated: Session = resolved
+                        ? {
+                            id: (resolved as any).id,
+                            status: (resolved as any).status,
+                            player_id: (resolved as any).player_id ?? undefined,
+                            created_at: (resolved as any).created_at,
+                            profiles: resolvedProfile && resolvedProfile.display_name
+                                ? { display_name: resolvedProfile.display_name }
+                                : null,
+                        }
+                        : {
+                            id: row.id,
+                            status: row.status,
+                            player_id: row.player_id ?? undefined,
+                            created_at: row.created_at,
+                            profiles: null,
+                        };
+
                     if (row.status !== "waiting" && row.status !== "playing") {
                         setSessions((prev) => prev.filter((s) => s.id !== row.id));
+                        if (updated.status === "ended") {
+                            setEndedSessions((prev) => {
+                                const exists = prev.some((s) => s.id === updated.id);
+                                if (exists) return prev.map((s) => (s.id === updated.id ? updated : s));
+                                return [updated, ...prev].slice(0, 20);
+                            });
+                        }
                         return;
                     }
-
-                    let profile: { display_name: string } | null = null;
-                    if (row.player_id) {
-                        const { data } = await supabase
-                            .from("profiles")
-                            .select("display_name")
-                            .eq("id", row.player_id)
-                            .single();
-                        profile = data ?? null;
-                    }
-
-                    const updated: Session = {
-                        id: row.id,
-                        status: row.status,
-                        player_id: row.player_id ?? undefined,
-                        created_at: row.created_at,
-                        profiles: profile,
-                    };
 
                     setSessions((prev) => {
                         const exists = prev.some((s) => s.id === updated.id);
@@ -233,134 +253,89 @@ function Admin() {
         );
     }
 
-    const activeList = sessions;
-    const endedList = endedSessions;
-    const currentList = view === "active" ? activeList : endedList;
-    const currentLoading = view === "active" ? loading : endedLoading;
-
     // sessions table
     return (
-        <div className="font-thai min-h-screen w-screen bg-neutral-900 p-8 text-white">
+        <div className="font-thai min-h-screen bg-neutral-900 p-8 text-white">
             <Toaster />
-            <div className="mx-auto justify-center max-w-5xl">
-                <div className="mb-6 flex items-center justify-between">
+            <div className="mx-auto justify-center max-w-5xl flex flex-col gap-10">
+                <div className="flex items-center justify-between">
                     <span className="flex flex-row justify-center items-center">
                         <img src={ccklogo} alt="Computer Club Logo" className="w-6 h-6 mr-2" />
                         <h1 className="font-thai text-2xl font-semibold tracking-tight">เซสชั่นทั้งหมด</h1>
                     </span>
-                    <div className="flex items-center gap-3">
-                        {!currentLoading && currentList.length > 0 && (
-                            <span className="text-sm text-neutral-500 font-thai">
-                                {currentList.length} {view === "active" ? "ที่เปิดอยู่" : "ที่จบแล้ว"}
-                            </span>
-                        )}
-                        {view === "active" && (
-                            <button
-                                onClick={handleNewSession}
-                                disabled={loading || creatingSession}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-700 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                {creatingSession ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : null}
-                                สร้างเซสชั่นใหม่
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* View toggle */}
-                <div className="mb-6 inline-flex rounded-lg border border-neutral-800 p-1">
                     <button
-                        onClick={() => setView("active")}
-                        className={
-                            "font-thai rounded-md px-4 py-1.5 text-sm font-medium transition " +
-                            (view === "active"
-                                ? "bg-neutral-800 text-white"
-                                : "text-neutral-500 hover:text-neutral-300")
-                        }
+                        onClick={handleNewSession}
+                        disabled={loading || creatingSession}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-700 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        กำลังเปิด
-                    </button>
-                    <button
-                        onClick={() => setView("ended")}
-                        className={
-                            "font-thai rounded-md px-4 py-1.5 text-sm font-medium transition " +
-                            (view === "ended"
-                                ? "bg-neutral-800 text-white"
-                                : "text-neutral-500 hover:text-neutral-300")
-                        }
-                    >
-                        จบแล้ว
+                        {creatingSession ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : null}
+                        สร้างเซสชั่นใหม่
                     </button>
                 </div>
 
-                {currentLoading ? (
-                    <div className="flex items-center justify-center py-16">
-                        <Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
+                {/* Active sessions */}
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="font-thai text-lg font-semibold text-neutral-300">กำลังเปิด</h2>
+                        {!loading && sessions.length > 0 && (
+                            <span className="text-sm text-neutral-500 font-thai">{sessions.length} ที่เปิดอยู่</span>
+                        )}
                     </div>
-                ) : currentList.length === 0 ? (
-                    <div className="rounded-xl border border-neutral-800 py-16 text-center">
-                        <p className="text-neutral-500">
-                            {view === "active" ? "ไม่มีเซสชั่นที่เปิดอยู่" : "ไม่มีเซสชั่นที่จบแล้ว"}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-800 overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="border-b border-neutral-800 bg-neutral-800/40 text-xs uppercase tracking-wide text-neutral-500">
-                                    <th className="px-4 py-3 font-medium">Session ID</th>
-                                    <th className="px-4 py-3 font-medium">Status</th>
-                                    <th className="px-4 py-3 font-medium">Player</th>
-                                    <th className="px-4 py-3 font-medium">Created</th>
-                                    {view === "active" && (
+
+                    {loading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
+                        </div>
+                    ) : sessions.length === 0 ? (
+                        <div className="rounded-xl border border-neutral-800 py-16 text-center">
+                            <p className="text-neutral-500">ไม่มีเซสชั่นที่กำลังเล่นในขณะนี้</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-hidden rounded-xl border border-neutral-800 overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="border-b border-neutral-800 bg-neutral-800/40 text-xs uppercase tracking-wide text-neutral-500">
+                                        <th className="px-4 py-3 font-medium">Session ID</th>
+                                        <th className="px-4 py-3 font-medium">Status</th>
+                                        <th className="px-4 py-3 font-medium">Player</th>
+                                        <th className="px-4 py-3 font-medium">Created</th>
                                         <th className="px-4 py-3 font-medium text-right">Action</th>
-                                    )}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-neutral-800 font-thai">
-                                {currentList.map((session) => (
-                                    <tr
-                                        key={session.id}
-                                        className="text-sm transition-colors hover:bg-neutral-800/30"
-                                    >
-                                        <td className="px-4 py-3 font-mono text-xs text-neutral-500">
-                                            {session.id.slice(0, 8)}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span
-                                                className={
-                                                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium " +
-                                                    (session.status === "playing"
-                                                        ? "bg-green-500/10 text-green-400"
-                                                        : session.status === "ended"
-                                                            ? "bg-neutral-500/10 text-neutral-400"
-                                                            : "bg-yellow-500/10 text-yellow-400")
-                                                }
-                                            >
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-800 font-thai">
+                                    {sessions.map((session) => (
+                                        <tr key={session.id} className="text-sm transition-colors hover:bg-neutral-800/30">
+                                            <td className="px-4 py-3 font-mono text-xs text-neutral-500">
+                                                {session.id.slice(0, 8)}
+                                            </td>
+                                            <td className="px-4 py-3">
                                                 <span
                                                     className={
-                                                        "h-1.5 w-1.5 rounded-full " +
+                                                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium " +
                                                         (session.status === "playing"
-                                                            ? "bg-green-400"
-                                                            : session.status === "ended"
-                                                                ? "bg-neutral-500"
-                                                                : "bg-yellow-400")
+                                                            ? "bg-green-500/10 text-green-400"
+                                                            : "bg-yellow-500/10 text-yellow-400")
                                                     }
-                                                />
-                                                {session.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {session.profiles?.display_name ?? (
-                                                <span className="text-neutral-600">ไม่มีผู้เล่น</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-neutral-500">
-                                            {formatDateTime(session?.created_at)}
-                                        </td>
-                                        {view === "active" && (
+                                                >
+                                                    <span
+                                                        className={
+                                                            "h-1.5 w-1.5 rounded-full " +
+                                                            (session.status === "playing" ? "bg-green-400" : "bg-yellow-400")
+                                                        }
+                                                    />
+                                                    {session.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {session.profiles?.display_name ?? (
+                                                    <span className="text-neutral-600">ไม่มีผู้เล่น</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-neutral-500">
+                                                {formatDateTime(session?.created_at)}
+                                            </td>
                                             <td className="px-4 py-3 text-right">
                                                 <button
                                                     onClick={() => handleEnd(session.id)}
@@ -370,16 +345,72 @@ function Admin() {
                                                     {endingId === session.id ? "กำลังปิด" : "ปิด"}
                                                 </button>
                                             </td>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    <p className="font-thai text-center text-xs text-neutral-400">
+                        คำเตือน : มันควรมีแค่ session เดียวที่เปิดอยู่ ถ้ามากกว่านั้นแปลว่ามีปัญหาแล้ว!
+                    </p>
+                </div>
+
+                {/* Ended sessions */}
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="font-thai text-lg font-semibold text-neutral-300">จบแล้ว</h2>
+                        {!endedLoading && endedSessions.length > 0 && (
+                            <span className="text-sm text-neutral-500 font-thai">{endedSessions.length} ที่จบแล้ว</span>
+                        )}
                     </div>
-                )}
-                {view === "active" && (
-                    <p className="font-thai text-center mt-6 text-xs text-neutral-400">คำเตือน : มันควรมีแค่ session เดียวที่เปิดอยู่ ถ้ามากกว่านั้นแปลว่ามีปัญหาแล้ว!</p>
-                )}
+
+                    {endedLoading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
+                        </div>
+                    ) : endedSessions.length === 0 ? (
+                        <div className="rounded-xl border border-neutral-800 py-16 text-center">
+                            <p className="text-neutral-500">ไม่มีเซสชั่นที่จบแล้ว</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-hidden rounded-xl border border-neutral-800 overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="border-b border-neutral-800 bg-neutral-800/40 text-xs uppercase tracking-wide text-neutral-500">
+                                        <th className="px-4 py-3 font-medium">Session ID</th>
+                                        <th className="px-4 py-3 font-medium">Status</th>
+                                        <th className="px-4 py-3 font-medium">Player</th>
+                                        <th className="px-4 py-3 font-medium">Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-800 font-thai">
+                                    {endedSessions.map((session) => (
+                                        <tr key={session.id} className="text-sm transition-colors hover:bg-neutral-800/30">
+                                            <td className="px-4 py-3 font-mono text-xs text-neutral-500">
+                                                {session.id.slice(0, 8)}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-500/10 px-2.5 py-1 text-xs font-medium text-neutral-400">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-500" />
+                                                    {session.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {session.profiles?.display_name ?? (
+                                                    <span className="text-neutral-600">ไม่มีผู้เล่น</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-neutral-500">
+                                                {formatDateTime(session?.created_at)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

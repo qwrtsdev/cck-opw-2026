@@ -1,6 +1,5 @@
 import Phaser from 'phaser'
-
-const EFFECT_DISPLAY_SIZE = 40
+import { GAME_CONFIG } from '../config'
 
 export class ShootEffect {
   private scene: Phaser.Scene
@@ -25,7 +24,8 @@ export class ShootEffect {
     sprite.setDepth(26)
     sprite.setOrigin(0.5, 0.5)
     sprite.setRotation(angle)
-    sprite.setDisplaySize(EFFECT_DISPLAY_SIZE * scale, EFFECT_DISPLAY_SIZE * scale)
+    const displaySize = GAME_CONFIG.WEAPONS.EFFECT_DISPLAY_SIZE
+    sprite.setDisplaySize(displaySize * scale, displaySize * scale)
     sprite.play(animKey)
     sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       sprite.destroy()

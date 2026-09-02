@@ -3,6 +3,9 @@ import { useSearchParams } from "react-router"
 import toast from 'react-hot-toast'
 import { supabase } from "@/lib/supabase"
 import { Loader2, Download } from 'lucide-react'
+import ccklogo from "@/assets/cck-logo.png"
+import gameLogo from "@/assets/cascade_failure_logo.png"
+import iglogo from "@/assets/instagram.png"
 
 function pad(num: number, size = 4) {
   return String(num).padStart(size, '0')
@@ -105,7 +108,7 @@ function ResultCard({
       style={fixedSize ? { width: 1080, height: 1920, padding: 96 } : undefined}
     >
       <p className={fixedSize ? "text-neutral-400 text-3xl" : "text-neutral-400 text-sm"}>
-        ผลการเล่น
+        คะแนนทั้งหมด
       </p>
       <h1
         className={
@@ -279,6 +282,12 @@ function EndScreen() {
       <ConfettiCanvas play={!!playConfetti} />
 
       <div className="z-30 w-full flex flex-col items-center gap-6 landscape:flex-row landscape:justify-center landscape:gap-10">
+        <span className="flex flex-row justify-center items-center mt-9">
+          <img src={gameLogo} alt="Cascade Failure Logo" className="w-80 h-auto mr-2" />
+        </span>
+
+        <p className="text-white font-thai">ขอบคุณที่เล่น! ไว้เจอกันใหม่น้า</p>
+
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-8 h-8 animate-spin text-neutral-500" />
@@ -289,7 +298,14 @@ function EndScreen() {
           invalidNotice
         )}
 
-        {exists && !loading && (
+        <p className="text-white font-thai text-sm text-center">นำผลสรุปคะแนน มาอวดกันได้ที่<br /><img src={iglogo} className="w-4 h-4 inline" /><b>{" "}comclub_kmutnb</b></p>
+
+        <span className="flex flex-row justify-center items-center mb-9">
+          <img src={ccklogo} alt="Computer Club Logo" className="w-5 h-5 mr-2" />
+          <h1 className="font-pixel text-4xl text-white tracking-tight">ชมรมคอมพิวเตอร์ มจพ.</h1>
+        </span>
+
+        {/* {exists && !loading && (
           <button
             onClick={handleDownload}
             disabled={downloading}
@@ -298,18 +314,18 @@ function EndScreen() {
             {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
             ดาวน์โหลดภาพ
           </button>
-        )}
+        )} */}
       </div>
 
       {/* Offscreen node, fixed at 1080x1920, used only as the export source */}
-      {exists && !loading && (
+      {/* {exists && !loading && (
         <div
           ref={exportRef}
           style={{ position: 'fixed', top: 0, left: '-9999px', width: 1080, height: 1920 }}
         >
           <ExportResultCard score={score} playerName={playerName} createdAt={createdAt} />
         </div>
-      )}
+      )} */}
     </div>
   )
 }

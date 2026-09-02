@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import gameLogo from '@/assets/cascade_failure_logo.png'
 import mapFinal from '@/assets/game/MAP_FINAL.png'
 import { GAME_CONFIG } from '../config'
 
@@ -11,16 +12,30 @@ export class BootScene extends Phaser.Scene {
     // Create loading bar
     const width = this.cameras.main.width
     const height = this.cameras.main.height
+    const centerX = width / 2
+    const centerY = height / 2
+
+    this.load.image('boot_logo', gameLogo)
+
+    let logo: Phaser.GameObjects.Image | null = null
+    this.load.once('filecomplete-image-boot_logo', () => {
+      if (logo) return
+
+      logo = this.add.image(centerX, centerY - 130, 'boot_logo')
+      logo.setOrigin(0.5, 0.5)
+      logo.setDisplaySize(260, 72)
+      logo.setAlpha(0.95)
+    })
 
     const progressBar = this.add.graphics()
     const progressBox = this.add.graphics()
 
-    progressBox.fillStyle(0x222222, 0.8)
-    progressBox.fillRect(width / 4, height / 2 - 30, width / 2, 50)
+    progressBox.fillStyle(0x111111, 0.75)
+    progressBox.fillRect(width / 4, centerY + 20, width / 2, 18)
 
     const loadingText = this.make.text({
-      x: width / 2,
-      y: height / 2 - 50,
+      x: centerX,
+      y: centerY + 65,
       text: 'Loading...',
       style: {
         font: '20px monospace',
@@ -30,8 +45,8 @@ export class BootScene extends Phaser.Scene {
     loadingText.setOrigin(0.5, 0.5)
 
     const percentText = this.make.text({
-      x: width / 2,
-      y: height / 2 - 5,
+      x: centerX,
+      y: centerY + 95,
       text: '0%',
       style: {
         font: '18px monospace',
@@ -42,12 +57,13 @@ export class BootScene extends Phaser.Scene {
 
     this.load.on('progress', (value: number) => {
       progressBar.clear()
-      progressBar.fillStyle(0x00ff00, 1)
-      progressBar.fillRect(width / 4 + 10, height / 2 - 20, (width / 2 - 20) * value, 30)
+      progressBar.fillStyle(0xffffff, 1)
+      progressBar.fillRect(width / 4 + 4, centerY + 24, (width / 2 - 8) * value, 10)
       percentText.setText(`${Math.floor(value * 100)}%`)
     })
 
     this.load.on('complete', () => {
+      logo?.destroy()
       progressBar.destroy()
       progressBox.destroy()
       loadingText.destroy()
